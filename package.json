@@ -1,0 +1,17 @@
+{
+  "name": "@kecan0406/aninames",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Multilingual alias index for anime titles and characters",
+  "license": "MIT",
+  "author": "kecan0406",
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.0",
+    "@types/bun": "^1.3.0",
+    "typescript": "^5.8.2"
+  },
+  "engines": {
+    "bun": ">=1.3"
+  }
+}

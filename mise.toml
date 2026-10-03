@@ -1,0 +1,45 @@
+[tools]
+bun = "1.3"
+
+[env]
+_.path = ["{{config_root}}/node_modules/.bin"]
+
+[tasks.fetch]
+description = "download every source's raw data into .cache/raw (or only the sources named)"
+run = "bun src/cli.ts fetch"
+
+[tasks.stage]
+description = "parse raw data into .cache/stage/<source>.jsonl (or only the sources named)"
+run = "bun src/cli.ts stage"
+
+[tasks.build]
+description = "merge the staged sources into one SQLite file per layer in dist/"
+run = "bun src/cli.ts build"
+
+[tasks.search]
+description = "search the built layers: mise run search <query>"
+run = "bun src/cli.ts search"
+
+[tasks.eval]
+description = "run the golden queries against the built layers"
+run = "bun src/cli.ts eval"
+
+[tasks.test]
+description = "unit tests"
+run = "bun test"
+
+[tasks.check]
+description = "typecheck"
+run = "tsc --noEmit"
+
+[tasks.lint]
+description = "biome lint + format check + import order"
+run = "biome check ."
+
+[tasks.format]
+description = "apply biome fixes"
+run = "biome check --write ."
+
+[tasks.ci]
+description = "lint + typecheck + tests"
+depends = ["lint", "check", "test"]
