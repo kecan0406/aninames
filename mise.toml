@@ -20,6 +20,16 @@ run = "bun src/cli.ts build"
 description = "zstd-compress the built files into dist/release for publishing"
 run = "bun src/cli.ts pack"
 
+[tasks.ttheme]
+description = "copy the ttheme slices into ttheme's cache, where it reads them"
+run = '''
+set -e
+target="${XDG_CACHE_HOME:-$HOME/.cache}/ttheme/aninames"
+mkdir -p "$target"
+cp dist/ttheme-*.json "$target/"
+ls -la "$target"
+'''
+
 [tasks.search]
 description = "search the built layers: mise run search <query>"
 run = "bun src/cli.ts search"

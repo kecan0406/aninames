@@ -8,9 +8,12 @@ const LANGS = ['ja', 'ko', 'en', 'zh'] as const
 type Lang = (typeof LANGS)[number]
 
 interface Card {
+  tag?: string
   danbooru?: string[]
   names?: Partial<Record<Lang, string[]>>
   generated?: string[]
+  rank?: number
+  weight?: number
 }
 
 function langOf(lang: string | null): Lang | undefined {
@@ -59,11 +62,30 @@ function sliceOf(path: string, tagged: Set<string>): Record<string, Card> {
     entry.danbooru = [...(entry.danbooru ?? []), row.ref.slice('danbooru:'.length)]
   }
   for (const row of db
-    .query("SELECT entity, text, lang, kind FROM names WHERE ekind = 'character' AND qual IS NULL")
-    .all() as { entity: string; text: string; lang: string | null; kind: string }[]) {
+    .query(
+      "SELECT entity, text FROM names WHERE ekind = 'character' AND source = 'danbooru' AND kind = 'main' AND qual IS NULL ORDER BY rowid",
+    )
+    .all() as { entity: string; text: string }[]) {
+    if (!tagged.has(row.entity)) continue
+    const entry = card(row.entity)
+    entry.tag ??= row.text.replaceAll(' ', '_')
+  }
+  for (const row of db.query("SELECT entity, rank, weight FROM ranks WHERE entity LIKE 'c/%'").all() as {
+    entity: string
+    rank: number
+    weight: number
+  }[]) {
+    if (!tagged.has(row.entity)) continue
+    const entry = card(row.entity)
+    entry.rank = Math.round(row.rank * 1000) / 1000
+    entry.weight = row.weight
+  }
+  for (const row of db
+    .query("SELECT entity, text, lang, kind, variant FROM names WHERE ekind = 'character' AND qual IS NULL")
+    .all() as { entity: string; text: string; lang: string | null; kind: string; variant: number }[]) {
     if (!tagged.has(row.entity)) continue
     if (row.kind === 'generated') {
-      if (row.lang !== 'ko') continue
+      if (row.lang !== 'ko' || row.variant) continue
       const entry = card(row.entity)
       entry.generated = [...new Set([...(entry.generated ?? []), row.text])]
       continue
