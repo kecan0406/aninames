@@ -40,7 +40,11 @@ Works and characters flagged adult (VNDB titles with no release under 18, Bangum
 
 Korean names: 19,065 characters carry a Korean name from a source (Wikidata, Korean Wikipedia cast lists, Danbooru, Bangumi), 7,057 of them from Korean Wikipedia alone. The rest get generated spellings (fan style preferred, national standard and loanword forms ranked lower).
 
-Built sizes: `core.sqlite` 610 MB, `kowiki.sqlite` 25 MB, `unlicensed.sqlite` 830 MB, plus `ttheme-<layer>.json` slices mapping Danbooru-tagged characters to their names for consumers without SQLite: each character's Danbooru tags (its main tag, the one with the most posts, first), that post count, its popularity and its names by language, with `other` for names no source labels. `mise run pack` compresses everything with zstd into `dist/release`.
+Built sizes: `core.sqlite` 610 MB, `kowiki.sqlite` 25 MB, `unlicensed.sqlite` 830 MB, plus `ttheme-<layer>.json` slices mapping Danbooru-tagged characters to their names for consumers without SQLite: each character's Danbooru tags (its main tag, the one with the most posts, first), that post count, its popularity and its names by language, with `other` for names no source labels. `mise run pack` writes `dist/release`: the databases zstd-compressed, the slices gzipped, `ttheme.json` (each slice's file, SHA-256 and size) and `NOTICE.md` (each layer's sources and terms).
+
+## Releases
+
+`.github/workflows/release.yml` fetches every source, builds, runs `eval` and packs every Sunday (and on demand), then publishes the files as a `data-<date>` release, keeping the four latest. The latest is always at `https://github.com/kecan0406/aninames/releases/latest/download/<file>` — ttheme reads `ttheme.json` there once a day and downloads the slices whose hash changed.
 
 ## Development
 
