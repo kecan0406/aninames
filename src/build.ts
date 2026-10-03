@@ -687,7 +687,7 @@ function schema(db: Database): void {
   db.run('PRAGMA synchronous = OFF')
   db.run('CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
   db.run('CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT NOT NULL, medium TEXT, type TEXT, year INTEGER)')
-  db.run('CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL)')
+  db.run('CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL, rank REAL)')
   db.run(
     'CREATE TABLE names (rowid INTEGER PRIMARY KEY, entity TEXT NOT NULL, ekind TEXT NOT NULL, text TEXT NOT NULL, lang TEXT, kind TEXT NOT NULL, source TEXT NOT NULL, flat TEXT NOT NULL, latin TEXT NOT NULL, qual TEXT, variant INTEGER NOT NULL, support INTEGER NOT NULL)',
   )
@@ -749,7 +749,7 @@ export async function build(): Promise<void> {
     const db = new Database(path, { create: true })
     schema(db)
     const insertEntity = db.prepare('INSERT INTO entities (id, kind, medium, type, year) VALUES (?, ?, ?, ?, ?)')
-    const insertRef = db.prepare('INSERT INTO refs (entity, ref) VALUES (?, ?)')
+    const insertRef = db.prepare('INSERT INTO refs (entity, ref, rank) VALUES (?, ?, ?)')
     const insertName = db.prepare(
       'INSERT INTO names (entity, ekind, text, lang, kind, source, flat, latin, qual, variant, support) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid',
     )
@@ -775,14 +775,16 @@ export async function build(): Promise<void> {
             dated?.year ?? null,
           )
         }
-        const refs = new Set<string>()
+        const refs = new Map<string, number | null>()
         const scores = new Map<string, number>()
         const works = new Set<string>()
         const related = new Set<string>()
         for (const m of entity.members) {
           if (m.layer !== layer) continue
-          refs.add(m.entry.id)
-          for (const ref of m.entry.refs ?? []) if (union.find(node(entity.kind, ref)) === root) refs.add(ref)
+          refs.set(m.entry.id, Math.max(refs.get(m.entry.id) ?? 0, m.entry.rank ?? 0) || null)
+          for (const ref of m.entry.refs ?? []) {
+            if (union.find(node(entity.kind, ref)) === root && !refs.has(ref)) refs.set(ref, null)
+          }
           if (m.entry.rank !== undefined) {
             const best = scores.get(m.source) ?? 0
             scores.set(m.source, Math.max(best, m.popularity))
@@ -796,7 +798,7 @@ export async function build(): Promise<void> {
             if (id && id !== entity.id) related.add(id)
           }
         }
-        for (const ref of refs) insertRef.run(entity.id, ref)
+        for (const [ref, rank] of refs) insertRef.run(entity.id, ref, rank)
         if (scores.size > 0) {
           const values = [...scores.values()]
           insertRank.run(entity.id, values.reduce((sum, value) => sum + value, 0) / values.length, values.length)

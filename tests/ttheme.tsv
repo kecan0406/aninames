@@ -21,8 +21,8 @@ flandre_scarlet	フランドール・スカーレット	Touhou Project
 frederica_bernkastel	フレデリカ・ベルンカステル	Umineko
 furude_rika	古手梨花	Higurashi
 fushiguro_megumi	伏黒恵	Jujutsu Kaisen
-getou_suguru	夏油傑	Jujutsu Kaisen
-gojou_satoru	五条悟	Jujutsu Kaisen
+geto_suguru	夏油傑	Jujutsu Kaisen
+gojo_satoru	五条悟	Jujutsu Kaisen
 gotoh_hitori	後藤ひとり	Bocchi the Rock!
 hakurei_reimu	博麗霊夢	Touhou Project
 hanekawa_tsubasa	羽川翼	Monogatari
@@ -38,7 +38,7 @@ hiruko_kohina	蛭子小比奈	Black Bullet
 houjou_satoko	北条沙都子	Higurashi
 ijichi_nijika	伊地知虹夏	Bocchi the Rock!
 isshiki_iroha	一色いろは	Oregairu
-itadori_yuuji	虎杖悠仁	Jujutsu Kaisen
+itadori_yuji	虎杖悠仁	Jujutsu Kaisen
 iwakura_lain	岩倉玲音	Lain
 izumi_konata	泉こなた	Lucky☆Star
 jibril_(no_game_no_life)	ジブリール	No Game No Life
@@ -46,7 +46,7 @@ jill_stingray	ジル・スティングレイ	VA-11 Hall-A
 kagamine_len	鏡音レン	Vocaloid
 kagamine_rin	鏡音リン	Vocaloid
 kaito_(vocaloid)	カイト|KAITO	Vocaloid
-kallen_stadtfeld	カレン・シュタットフェルト|紅月カレン	Code Geass
+kouzuki_kallen	カレン・シュタットフェルト|紅月カレン	Code Geass
 kamazuki_suzuno	鎌月鈴乃	The Devil Is a Part-Timer!
 kaname_madoka	鹿目まどか	Madoka Magica
 katsuragi_misato	葛城ミサト	Evangelion
@@ -54,15 +54,15 @@ kikyou_seri	桔梗セリ	Call of the Night
 kirisame_marisa	霧雨魔理沙	Touhou Project
 kirito	キリト|桐ヶ谷和人	Sword Art Online
 kita_ikuyo	喜多郁代	Bocchi the Rock!
-kitagawa_yuusuke	喜多川祐介|フォックス	Persona 5
+kitagawa_yusuke	喜多川祐介|フォックス	Persona 5
 konpaku_youmu	魂魄妖夢	Touhou Project
 kotobuki_tsumugi	琴吹紬	K-On!
 kugisaki_nobara	釘崎野薔薇	Jujutsu Kaisen
 kururugi_suzaku	枢木スザク	Code Geass
-kyuubee	キュゥべえ	Madoka Magica
+kyubey	キュゥべえ	Madoka Magica
 lambdadelta	ラムダデルタ	Umineko
 leafa_(sao)	リーファ|桐ヶ谷直葉	Sword Art Online
-lelouch_lamperouge	ルルーシュ・ランペルージ	Code Geass
+lelouch_vi_britannia	ルルーシュ・ランペルージ	Code Geass
 lucy_(cyberpunk)	ルーシー	Cyberpunk: Edgerunners
 makise_kurisu	牧瀬紅莉栖	Steins;Gate
 maou_sadao	真奥貞夫	The Devil Is a Part-Timer!
@@ -81,7 +81,7 @@ nanami_kento	七海建人	Jujutsu Kaisen
 natsuki_(doki_doki_literature_club)	ナツキ	Doki Doki Literature Club
 nibutani_shinka	丹生谷森夏	Chuunibyou
 niijima_makoto	新島真|クイーン	Persona 5
-nunnally_lamperouge	ナナリー・ランペルージ	Code Geass
+nunnally_vi_britannia	ナナリー・ランペルージ	Code Geass
 oshino_shinobu	忍野忍	Monogatari
 papyrus_(undertale)	パピルス	Undertale
 patchouli_knowledge	パチュリー・ノーレッジ	Touhou Project
@@ -95,9 +95,9 @@ sailor_mercury	セーラーマーキュリー|水野亜美	Sailor Moon
 sailor_moon	セーラームーン|月野うさぎ	Sailor Moon
 sailor_venus	セーラーヴィーナス|愛野美奈子	Sailor Moon
 sakamoto_(nichijou)	阪本	Nichijou
-sakamoto_ryuuji	坂本竜司|スカル	Persona 5
+sakamoto_ryuji	坂本竜司|スカル	Persona 5
 sakura_futaba	佐倉双葉|ナビ	Persona 5
-sakura_kyouko	佐倉杏子	Madoka Magica
+sakura_kyoko	佐倉杏子	Madoka Magica
 sans_(undertale)	サンズ	Undertale
 sasaki_chiho	佐々木千穂	The Devil Is a Part-Timer!
 satomi_rentarou	里見蓮太郎	Black Bullet
@@ -115,7 +115,7 @@ souryuu_asuka_langley	惣流・アスカ・ラングレー	Evangelion
 stella_hoshii	ステラ・ホシイ	VA-11 Hall-A
 stephanie_dora	ステファニー・ドーラ	No Game No Life
 tainaka_ritsu	田井中律	K-On!
-takamaki_anne	高巻杏|パンサー	Persona 5
+takamaki_ann	高巻杏|パンサー	Persona 5
 takanashi_rikka	小鳥遊六花	Chuunibyou
 takara_miyuki	高良みゆき	Lucky☆Star
 tendou_kisara	天童木更	Black Bullet
@@ -129,7 +129,7 @@ uguisu_anko	鶯アンコ	Call of the Night
 undyne	アンダイン	Undertale
 urushihara_hanzou	漆原半蔵	The Devil Is a Part-Timer!
 ushiromiya_battler	右代宮戦人	Umineko
-yamada_ryou	山田リョウ	Bocchi the Rock!
+yamada_ryo	山田リョウ	Bocchi the Rock!
 yamori_kou	夜守コウ	Call of the Night
 yuigahama_yui	由比ヶ浜結衣	Oregairu
 yukinoshita_haruno	雪ノ下陽乃	Oregairu

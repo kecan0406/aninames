@@ -40,7 +40,7 @@ Works and characters flagged adult (VNDB titles with no release under 18, Bangum
 
 Korean names: 19,065 characters carry a Korean name from a source (Wikidata, Korean Wikipedia cast lists, Danbooru, Bangumi), 7,057 of them from Korean Wikipedia alone. The rest get generated spellings (fan style preferred, national standard and loanword forms ranked lower).
 
-Built sizes: `core.sqlite` 610 MB, `kowiki.sqlite` 25 MB, `unlicensed.sqlite` 830 MB, plus `ttheme-<layer>.json` slices mapping Danbooru-tagged characters to their names for consumers without SQLite. `mise run pack` compresses everything with zstd into `dist/release`.
+Built sizes: `core.sqlite` 610 MB, `kowiki.sqlite` 25 MB, `unlicensed.sqlite` 830 MB, plus `ttheme-<layer>.json` slices mapping Danbooru-tagged characters to their names for consumers without SQLite: each character's Danbooru tags (its main tag, the one with the most posts, first), that post count, its popularity and its names by language, with `other` for names no source labels. `mise run pack` compresses everything with zstd into `dist/release`.
 
 ## Development
 

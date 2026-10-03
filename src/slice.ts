@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { LAYERS, type Layer } from './model.ts'
 
-const LANGS = ['ja', 'ko', 'en', 'zh'] as const
+const LANGS = ['ja', 'ko', 'en', 'zh', 'other'] as const
 
 type Lang = (typeof LANGS)[number]
 
@@ -14,10 +14,13 @@ interface Card {
   generated?: string[]
   rank?: number
   weight?: number
+  posts?: number
 }
 
-function langOf(lang: string | null): Lang | undefined {
-  if (!lang) return undefined
+const LATIN = /\p{Script=Latin}/u
+
+function langOf(lang: string | null, text: string): Lang | undefined {
+  if (!lang) return LATIN.test(text) ? undefined : 'other'
   if (lang === 'ja' || lang === 'ko' || lang === 'en') return lang
   if (lang.startsWith('zh') && lang !== 'zh-Latn') return 'zh'
   return undefined
@@ -53,22 +56,21 @@ function sliceOf(path: string, tagged: Set<string>): Record<string, Card> {
     return found
   }
   for (const row of db
-    .query("SELECT entity, ref FROM refs WHERE ref LIKE 'danbooru:%' AND entity LIKE 'c/%'")
+    .query(
+      "SELECT entity, ref, rank FROM refs WHERE ref LIKE 'danbooru:%' AND entity LIKE 'c/%' ORDER BY entity, rank IS NULL, rank DESC, rowid",
+    )
     .all() as {
     entity: string
     ref: string
+    rank: number | null
   }[]) {
     const entry = card(row.entity)
-    entry.danbooru = [...(entry.danbooru ?? []), row.ref.slice('danbooru:'.length)]
-  }
-  for (const row of db
-    .query(
-      "SELECT entity, text FROM names WHERE ekind = 'character' AND source = 'danbooru' AND kind = 'main' AND qual IS NULL ORDER BY rowid",
-    )
-    .all() as { entity: string; text: string }[]) {
-    if (!tagged.has(row.entity)) continue
-    const entry = card(row.entity)
-    entry.tag ??= row.text.replaceAll(' ', '_')
+    const tag = row.ref.slice('danbooru:'.length)
+    entry.danbooru = [...(entry.danbooru ?? []), tag]
+    if (row.rank !== null) {
+      entry.tag ??= tag
+      entry.posts = Math.max(entry.posts ?? 0, row.rank)
+    }
   }
   for (const row of db.query("SELECT entity, rank, weight FROM ranks WHERE entity LIKE 'c/%'").all() as {
     entity: string
@@ -91,7 +93,7 @@ function sliceOf(path: string, tagged: Set<string>): Record<string, Card> {
       continue
     }
     if (row.kind === 'reading' || row.kind === 'section') continue
-    const lang = langOf(row.lang)
+    const lang = langOf(row.lang, row.text)
     if (!lang) continue
     const entry = card(row.entity)
     const names = entry.names ?? {}
