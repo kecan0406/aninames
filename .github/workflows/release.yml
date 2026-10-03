@@ -32,6 +32,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="data-$(date -u +%Y-%m-%d)"
+          gh release delete "$tag" --cleanup-tag --yes 2>/dev/null || true
           gh release create "$tag" dist/release/* --title "$tag" --notes-file dist/release/NOTICE.md --latest
           gh release list --limit 100 --json tagName --jq '.[4:][].tagName' | while read -r old; do
             gh release delete "$old" --cleanup-tag --yes
