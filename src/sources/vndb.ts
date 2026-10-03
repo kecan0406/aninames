@@ -33,6 +33,8 @@ const FILES = [
 
 const BLOCK = 512
 
+const ROLE_WEIGHT: Record<string, number> = { primary: 1, main: 0.6, side: 0.2, appears: 0.05 }
+
 const ESCAPES: Record<string, string> = { b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' }
 
 const LANGS: Record<string, string> = { 'pt-br': 'pt-BR', 'pt-pt': 'pt-PT', ta: 'tl', ck: 'chr' }
@@ -224,19 +226,31 @@ async function group<T>(
   return out
 }
 
-async function firstReleases(raw: string): Promise<Map<number, number>> {
+async function firstReleases(raw: string): Promise<{ first: Map<number, number>; youngest: Map<number, number> }> {
   const dates = new Map<number, number>()
-  for await (const [id, released, official] of rows(raw, 'releases', ['id', 'released', 'official'])) {
-    if (official === 't' && released !== '0') dates.set(num(id), Number(released))
+  const ages = new Map<number, number>()
+  for await (const [id, released, official, minage] of rows(raw, 'releases', [
+    'id',
+    'released',
+    'official',
+    'minage',
+  ])) {
+    if (official !== 't') continue
+    if (released !== '0') dates.set(num(id), Number(released))
+    if (minage && /^\d+$/.test(minage)) ages.set(num(id), Number(minage))
   }
   const first = new Map<number, number>()
+  const youngest = new Map<number, number>()
   for await (const [id, vid, rtype] of rows(raw, 'releases_vn', ['id', 'vid', 'rtype'])) {
+    if (rtype === 'trial') continue
+    const age = ages.get(num(id))
+    if (age !== undefined) youngest.set(num(vid), Math.min(youngest.get(num(vid)) ?? age, age))
     const date = dates.get(num(id))
-    if (date === undefined || rtype === 'trial') continue
+    if (date === undefined) continue
     const known = first.get(num(vid))
     if (known === undefined || date < known) first.set(num(vid), date)
   }
-  return first
+  return { first, youngest }
 }
 
 async function wikidataLinks(raw: string): Promise<Map<number, Ref[]>> {
@@ -341,7 +355,10 @@ function characterNames(lang: string, spellings: readonly Spelling[], aliases: r
 }
 
 async function* characters(raw: string, works: ReadonlyMap<number, Work>): AsyncIterable<Entry> {
-  const appearances = await group(raw, 'chars_vns', ['id', 'vid'], ([, vid]) => num(vid ?? ''))
+  const roles = await group(raw, 'chars_vns', ['id', 'vid', 'role'], ([, vid, role]) => ({
+    vid: num(vid ?? ''),
+    weight: ROLE_WEIGHT[role ?? ''] ?? 0.3,
+  }))
   const instances = await group(raw, 'chars', ['id', 'main', 'main_spoil'], ([, main, spoil]) =>
     main && /^c?\d+$/.test(main) && spoil === '0' ? num(main) : undefined,
   )
@@ -354,7 +371,8 @@ async function* characters(raw: string, works: ReadonlyMap<number, Work>): Async
     latin: latin ?? '',
   }))
   for (const [id, own] of spellings) {
-    const vids = [...new Set(appearances.get(id) ?? [])]
+    const cast = roles.get(id) ?? []
+    const vids = [...new Set(cast.map((each) => each.vid))]
     const lang = mainLang(own, vids, works)
     const entry: Entry = {
       id: ref('vndb', `c${id}`),
@@ -364,7 +382,7 @@ async function* characters(raw: string, works: ReadonlyMap<number, Work>): Async
     if (vids.length > 0) entry.works = vids.map((vid) => ref('vndb', `v${vid}`))
     const main = instances.get(id)?.[0]
     if (main !== undefined) entry.refs = [ref('vndb', `c${main}`)]
-    entry.rank = Math.max(0, ...vids.map((vid) => works.get(vid)?.votes ?? 0))
+    entry.rank = Math.max(0, ...cast.map((each) => (works.get(each.vid)?.votes ?? 0) * each.weight))
     yield entry
   }
 }
@@ -396,7 +414,7 @@ export default {
     if (!(await readMeta(raw))) {
       throw new Error(`aninames: ${join(raw, 'meta.json')} is missing; run fetch vndb first`)
     }
-    const released = await firstReleases(raw)
+    const { first: released, youngest } = await firstReleases(raw)
     const wikidata = await wikidataLinks(raw)
     const titles = await group(raw, 'vn_titles', ['id', 'lang', 'official', 'title', 'latin'], (row) => {
       const [, lang = '', official, title = '', latin = ''] = row
@@ -407,7 +425,9 @@ export default {
       const id = num(vid)
       const work: Work = { olang: interned(olang), votes: Number(votes), released: released.get(id) ?? 0 }
       works.set(id, work)
-      yield workEntry(id, work, titles.get(id) ?? [], alias, wikidata.get(id) ?? [])
+      const entry = workEntry(id, work, titles.get(id) ?? [], alias, wikidata.get(id) ?? [])
+      if ((youngest.get(id) ?? 0) >= 18) entry.adult = true
+      yield entry
     }
     yield* characters(raw, works)
   },

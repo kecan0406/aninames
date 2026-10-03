@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { flat, hangulVariants, kanaToHangul, kanaToRomaji, latinKey, qualifiers, soundKeys } from '../src/text.ts'
+import { flat, hangulForms, kanaToHangul, kanaToRomaji, latinKey, qualifiers, soundKeys } from '../src/text.ts'
 
 test('kana becomes Hepburn romaji', () => {
   expect(kanaToRomaji('ごとう ひとり')).toBe('gotou hitori')
@@ -16,8 +16,17 @@ test('the national standard writes plain initials, つ as 쓰 and drops long vow
 })
 
 test('fan spelling writes aspirated initials and 츠, with and without long vowels', () => {
-  expect(hangulVariants('ごじょう さとる')).toEqual(['고조 사토루', '고죠 사토루', '고죠우 사토루'])
+  expect(hangulForms('ごじょう さとる')).toEqual([
+    { text: '고죠 사토루', preferred: true },
+    { text: '고죠우 사토루', preferred: false },
+    { text: '고조 사토루', preferred: false },
+  ])
   expect(kanaToHangul('はつね みく', 'fan')).toBe('하츠네 미쿠')
+})
+
+test('katakana names also get loanword spellings, with and without a doubled ㄹ', () => {
+  expect(hangulForms('クラウド').map((form) => form.text)).toEqual(['쿠라우도', '구라우도', '크라우드', '클라우드'])
+  expect(hangulForms('フリーレン').map((form) => form.text)).toContain('프리렌')
 })
 
 test('sound keys meet across kana, Hangul and romaji spellings and name order', () => {

@@ -1,8 +1,9 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
+import { convertHangulToQwerty, convertQwertyToHangul } from 'es-hangul'
 import type { Kind, Layer, NameKind } from './model.ts'
-import { flat, latinKey, qualifiers, soundKeys } from './text.ts'
+import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from './text.ts'
 
 export interface Hit {
   id: string
@@ -10,6 +11,7 @@ export interface Hit {
   score: number
   matched: string
   how: string
+  adult?: boolean
 }
 
 export interface Card {
@@ -29,6 +31,8 @@ interface NameRow {
   kind: NameKind
   flat: string
   qual: string | null
+  variant: number
+  support: number
 }
 
 const NAME_WEIGHT: Record<NameKind, number> = {
@@ -42,7 +46,56 @@ const NAME_WEIGHT: Record<NameKind, number> = {
   generated: 0.85,
 }
 
-const COLUMNS = 'rowid, entity, ekind, text, kind, flat, qual'
+const WEAK: ReadonlySet<NameKind> = new Set(['synonym', 'short', 'redirect', 'section'])
+
+function weightOf(row: NameRow): number {
+  return NAME_WEIGHT[row.kind] * (row.variant ? 0.9 : 1) * (row.support <= 1 && WEAK.has(row.kind) ? 0.93 : 1)
+}
+
+const COLUMNS = 'rowid, entity, ekind, text, kind, flat, qual, variant, support'
+
+const INITIAL_JAMO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
+
+function typing(q: string): [string, string][] {
+  const ranges: [string, string][] = [[q, `${q}\u{10FFFF}`]]
+  const chars = [...q]
+  const last = chars.at(-1) ?? ''
+  const head = chars.slice(0, -1).join('')
+  const code = (last.codePointAt(0) ?? 0) - 0xac00
+  if (code >= 0 && code < 11172 && code % 28 === 0) {
+    ranges.push([
+      `${head}${String.fromCodePoint(0xac00 + code + 1)}`,
+      `${head}${String.fromCodePoint(0xac00 + code + 27)}\u{10FFFF}`,
+    ])
+  }
+  const conjoined = (last.codePointAt(0) ?? 0) - 0x1100
+  const initial = conjoined >= 0 && conjoined < 19 ? conjoined : INITIAL_JAMO.indexOf(last)
+  if (initial >= 0 && head) {
+    ranges.push([
+      `${head}${String.fromCodePoint(0xac00 + initial * 588)}`,
+      `${head}${String.fromCodePoint(0xac00 + initial * 588 + 587)}\u{10FFFF}`,
+    ])
+  }
+  const kana = /^([\p{Script=Hiragana}\p{Script=Katakana}ー]+)[a-z]+$/u.exec(q)?.[1]
+  if (kana) ranges.push([kana, `${kana}\u{10FFFF}`])
+  return ranges
+}
+
+function swapLayout(query: string): string | undefined {
+  const text = query.trim()
+  try {
+    if (/[a-z]/i.test(text) && !/[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text)) {
+      const hangul = text.replace(/[a-z]+/gi, (run) => convertQwertyToHangul(run))
+      return /[ㄱ-ㅎㅏ-ㅣ]/.test(hangul) || !/\p{Script=Hangul}/u.test(hangul) ? undefined : hangul
+    }
+    if (/\p{Script=Hangul}/u.test(text) && !/[a-z\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/iu.test(text)) {
+      return text.replace(/[\p{Script=Hangul}]+/gu, (run) => convertHangulToQwerty(run)).toLowerCase()
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
 
 export class Index {
   readonly layers: Layer[]
@@ -83,8 +136,12 @@ export class Index {
   rank(id: string): number {
     const cached = this.ranks.get(id)
     if (cached !== undefined) return cached
-    const rows = this.union<{ rank: number }>((s) => `SELECT rank FROM ${s}.ranks WHERE entity = ?`, id)
-    const rank = rows.reduce((best, row) => Math.max(best, row.rank), 0)
+    const rows = this.union<{ rank: number; weight: number }>(
+      (s) => `SELECT rank, weight FROM ${s}.ranks WHERE entity = ?`,
+      id,
+    )
+    const weight = rows.reduce((sum, row) => sum + row.weight, 0)
+    const rank = weight > 0 ? rows.reduce((sum, row) => sum + row.rank * row.weight, 0) / weight : 0
     this.ranks.set(id, rank)
     return rank
   }
@@ -143,7 +200,7 @@ export class Index {
     const filter = kind ? ` AND ekind = '${kind}'` : ''
     const consider = (row: NameRow, base: number, how: string) => {
       if (kind && row.ekind !== kind) return
-      const score = base * NAME_WEIGHT[row.kind] * (row.qual === null ? 1 : 0.9)
+      const score = base * weightOf(row)
       const current = hits.get(row.entity)
       if (!current || current.score < score)
         hits.set(row.entity, { id: row.entity, kind: row.ekind, score, matched: row.text, how })
@@ -162,37 +219,58 @@ export class Index {
         consider(row, 95, 'latin')
       }
     }
+    if (/^[ㄱ-ㅎ\s]+$/.test(query.trim())) {
+      const key = query.replace(/\s+/g, '')
+      const join = (s: string) =>
+        `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual, n.variant, n.support FROM ${s}.initials i JOIN ${s}.names n ON n.rowid = i.name`
+      for (const row of this.union<NameRow>(
+        (s) => `${join(s)} WHERE i.key = ?${filter.replace('ekind', 'n.ekind')}`,
+        key,
+      )) {
+        consider(row, 86, 'initials')
+      }
+      for (const row of this.union<NameRow & { key: string }>(
+        (s) =>
+          `${join(s).replace('SELECT n.rowid', 'SELECT i.key, n.rowid')} WHERE i.key > ? AND i.key < ?${filter.replace('ekind', 'n.ekind')} LIMIT 3000`,
+        key,
+        `${key}\u{10FFFF}`,
+      )) {
+        consider(row, 60 + 20 * ([...key].length / [...row.key].length), 'initials prefix')
+      }
+    }
     if (!/\s/.test(query.trim())) {
       for (const row of this.union<NameRow>(
         (s) =>
-          `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual FROM ${s}.parts p JOIN ${s}.names n ON n.rowid = p.name WHERE p.part = ?${filter.replace('ekind', 'n.ekind')}`,
-        q,
+          `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual, n.variant, n.support FROM ${s}.parts p JOIN ${s}.names n ON n.rowid = p.name WHERE p.part = ?${filter.replace('ekind', 'n.ekind')}`,
+        partKey(query),
       )) {
-        consider(row, 84, 'part')
+        consider(row, row.ekind === 'character' && (row.kind === 'main' || row.kind === 'official') ? 92 : 84, 'part')
       }
     }
-    for (const key of soundKeys(qualifiers(query).base)) {
+    for (const key of /[ㄱ-ㅎㅏ-ㅣ\u1100-\u11ff]/.test(query) ? [] : soundKeys(qualifiers(query).base)) {
       for (const row of this.union<NameRow>(
         (s) =>
-          `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual FROM ${s}.sounds k JOIN ${s}.names n ON n.rowid = k.name WHERE k.key = ?${filter.replace('ekind', 'n.ekind')}`,
+          `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual, n.variant, n.support FROM ${s}.sounds k JOIN ${s}.names n ON n.rowid = k.name WHERE k.key = ?${filter.replace('ekind', 'n.ekind')}`,
         key,
       )) {
         consider(row, 82, 'sound')
       }
     }
     const length = [...q].length
-    for (const row of this.union<NameRow>(
-      (s) => `SELECT ${COLUMNS} FROM ${s}.names WHERE flat > ? AND flat < ?${filter} LIMIT 3000`,
-      q,
-      `${q}\u{10FFFF}`,
-    )) {
-      consider(row, 60 + 25 * (length / [...row.flat].length), 'prefix')
+    for (const [low, high] of typing(q)) {
+      for (const row of this.union<NameRow>(
+        (s) => `SELECT ${COLUMNS} FROM ${s}.names WHERE flat > ? AND flat < ?${filter} LIMIT 3000`,
+        low,
+        high,
+      )) {
+        consider(row, 60 + 25 * (length / [...row.flat].length), low === q ? 'prefix' : 'typing')
+      }
     }
     if (length >= 3) {
       const phrase = `"${q.replaceAll('"', '""')}"`
       for (const row of this.union<NameRow>(
         (s) =>
-          `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual FROM ${s}.names_fts f JOIN ${s}.names n ON n.rowid = f.rowid WHERE names_fts MATCH ?${filter.replace('ekind', 'n.ekind')} LIMIT 3000`,
+          `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual, n.variant, n.support FROM ${s}.names_fts f JOIN ${s}.names n ON n.rowid = f.rowid WHERE names_fts MATCH ?${filter.replace('ekind', 'n.ekind')} LIMIT 3000`,
         phrase,
       )) {
         consider(row, 40 + 30 * (length / [...row.flat].length), 'substring')
@@ -206,24 +284,37 @@ export class Index {
     const q = flat(query)
     const chars = [...q]
     if (chars.length < 4) return hits
-    const grams = new Set<string>()
-    for (let i = 0; i + 3 <= chars.length; i++) grams.add(chars.slice(i, i + 3).join(''))
-    const match = [...grams].map((g) => `"${g.replaceAll('"', '""')}"`).join(' OR ')
+    const limit = chars.length >= 8 ? 2 : 1
+    const grams: string[] = []
+    for (let i = 0; i + 3 <= chars.length; i++) grams.push(chars.slice(i, i + 3).join(''))
+    const quoted = (gram: string) => `"${gram.replaceAll('"', '""')}"`
+    const probes = new Set<string>()
+    if (grams.length <= 5) probes.add(grams.map(quoted).join(' OR '))
+    else {
+      probes.add(`${quoted(grams[0] ?? '')} AND ${quoted(grams[1] ?? '')}`)
+      probes.add(`${quoted(grams.at(-2) ?? '')} AND ${quoted(grams.at(-1) ?? '')}`)
+    }
     const filter = kind ? ` AND n.ekind = '${kind}'` : ''
-    for (const row of this.union<NameRow>(
-      (s) =>
-        `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual FROM ${s}.names_fts f JOIN ${s}.names n ON n.rowid = f.rowid WHERE names_fts MATCH ?${filter} LIMIT 5000`,
-      match,
-    )) {
-      let shared = 0
-      for (const gram of grams) if (row.flat.includes(gram)) shared++
-      const overlap = shared / grams.size
-      const lengthRatio = Math.min(chars.length, [...row.flat].length) / Math.max(chars.length, [...row.flat].length)
-      if (overlap < 0.5) continue
-      const score = 55 * overlap * (0.5 + 0.5 * lengthRatio) * NAME_WEIGHT[row.kind]
-      const current = hits.get(row.entity)
-      if (!current || current.score < score)
-        hits.set(row.entity, { id: row.entity, kind: row.ekind, score, matched: row.text, how: 'fuzzy' })
+    for (const probe of probes) {
+      for (const row of this.union<NameRow>(
+        (s) =>
+          `SELECT n.rowid, n.entity, n.ekind, n.text, n.kind, n.flat, n.qual, n.variant, n.support FROM ${s}.names_fts f JOIN ${s}.names n ON n.rowid = f.rowid WHERE names_fts MATCH ?${filter} ORDER BY f.rank LIMIT 3000`,
+        probe,
+      )) {
+        const name = [...row.flat]
+        let score = 0
+        const whole = editDistance(q, row.flat, limit)
+        if (whole <= limit) score = 92 - 10 * whole
+        else if (name.length > chars.length) {
+          const lead = editDistance(q, name.slice(0, chars.length).join(''), limit)
+          if (lead <= limit) score = 72 - 10 * lead
+        }
+        if (score === 0) continue
+        score *= weightOf(row)
+        const current = hits.get(row.entity)
+        if (!current || current.score < score)
+          hits.set(row.entity, { id: row.entity, kind: row.ekind, score, matched: row.text, how: 'typo' })
+      }
     }
     return hits
   }
@@ -337,9 +428,11 @@ export class Index {
         const people = [...this.candidates(who.join(' '), 'character').values()].filter((h) => h.score >= 80)
         if (people.length === 0) continue
         const series = flat(where.join(' '))
-        const works = new Set(
-          [...this.candidates(where.join(' '), 'work').values()].filter((h) => h.score >= 50).map((h) => h.id),
-        )
+        const matched = [...this.candidates(where.join(' '), 'work').values()]
+          .filter((h) => h.score >= 50)
+          .map((h) => h.id)
+        const works = new Set(matched)
+        for (const id of matched.slice(0, 20)) for (const other of this.reach(id)) works.add(other)
         for (const person of people) {
           const linked = [...this.works(person.id)].some((w) => works.has(w))
           const qualified = this.quals(person.id).some((q) => q.startsWith(series) || series.startsWith(q))
@@ -354,7 +447,23 @@ export class Index {
     return hits
   }
 
-  search(query: string, options: { kind?: Kind; limit?: number } = {}): Hit[] {
+  homonyms(query: string, kind: Kind): number {
+    const key = flat(query)
+    const ids = new Set(
+      this.union<{ entity: string }>(
+        (s) => `SELECT entity FROM ${s}.names WHERE flat = ? AND ekind = ?`,
+        key,
+        kind,
+      ).map((row) => row.entity),
+    )
+    return ids.size
+  }
+
+  adult(id: string): boolean {
+    return this.union<{ entity: string }>((s) => `SELECT entity FROM ${s}.adults WHERE entity = ?`, id).length > 0
+  }
+
+  search(query: string, options: { kind?: Kind; limit?: number; adult?: boolean } = {}): Hit[] {
     const hits = this.candidates(query, options.kind)
     if (!options.kind || options.kind === 'character') {
       for (const [id, hit] of this.scoped(query)) {
@@ -363,14 +472,27 @@ export class Index {
       }
     }
     if (!options.kind || options.kind === 'work') this.family(hits, query)
-    const best = Math.max(0, ...[...hits.values()].map((h) => h.score))
-    if (best < 60) {
-      for (const [id, hit] of this.fuzzy(query, options.kind)) if (!hits.has(id)) hits.set(id, hit)
+    const merge = (more: Map<string, Hit>, factor: number, how?: string) => {
+      for (const [id, hit] of more) {
+        const score = hit.score * factor
+        const current = hits.get(id)
+        if (!current || current.score < score)
+          hits.set(id, { ...hit, score, how: how ? `${how}(${hit.how})` : hit.how })
+      }
     }
+    let best = Math.max(0, ...[...hits.values()].map((h) => h.score))
+    if (best < 90) {
+      const swapped = swapLayout(query)
+      if (swapped) merge(this.candidates(swapped, options.kind), 0.95, 'layout')
+      best = Math.max(0, ...[...hits.values()].map((h) => h.score))
+    }
+    if (best < 95) merge(this.fuzzy(query, options.kind), 1)
     const first = [...hits.values()]
       .map((hit) => ({ ...hit, score: hit.score + 15 * this.rank(hit.id) + this.prior(hit) }))
       .sort((a, b) => b.score - a.score)
+      .filter((hit) => options.adult !== false || !this.adult(hit.id))
       .slice(0, 60)
+    const weight = /\s/.test(query.trim()) ? 15 : 25
     return first
       .map((hit) => {
         const base = hits.get(hit.id)?.score ?? 0
@@ -378,9 +500,10 @@ export class Index {
           ...hit,
           score:
             base +
-            15 * this.standing(hit) +
+            weight * this.standing(hit) +
             this.prior(hit) +
             (hit.kind === 'character' ? this.corroboration(hit.id) : 0),
+          adult: this.adult(hit.id),
         }
       })
       .sort((a, b) => b.score - a.score)

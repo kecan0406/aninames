@@ -18,26 +18,75 @@ function run(index: Index, set: Golden[], title: string): number {
   return set.length - passed
 }
 
-async function ttheme(index: Index): Promise<number> {
-  const tags = (await Bun.file(join(import.meta.dirname, '..', 'tests', 'ttheme.txt')).text())
+interface Cast {
+  tag: string
+  natives: string[]
+  group: string
+}
+
+async function cast(): Promise<Cast[]> {
+  const text = await Bun.file(join(import.meta.dirname, '..', 'tests', 'ttheme.tsv')).text()
+  return text
     .split('\n')
     .filter(Boolean)
+    .map((line) => {
+      const [tag = '', natives = '', group = ''] = line.split('\t')
+      return { tag, natives: natives.split('|').filter(Boolean), group }
+    })
+}
+
+function romaji(tag: string): string {
+  return tag
+    .replace(/_\([^)]*\)$/, '')
+    .replace(/_/g, ' ')
+    .trim()
+}
+
+function forms(member: Cast): [string, string][] {
+  const name = romaji(member.tag)
+  const tokens = name.split(' ')
+  const out: [string, string][] = member.natives.map((native) => ['japanese', native])
+  out.push(['romaji', name])
+  if (tokens.length === 2) {
+    out.push(['romaji reversed', [...tokens].reverse().join(' ')])
+    out.push(['given name + series', `${tokens[1]} ${member.group}`])
+  }
+  return out
+}
+
+async function ttheme(index: Index): Promise<number> {
+  const members = await cast()
   const missing: string[] = []
   const nameless: string[] = []
-  for (const tag of tags) {
-    const id = index.resolve(`danbooru:${tag}`, 'character')
+  const tally = new Map<string, { hit: number; total: number; misses: string[] }>()
+  for (const member of members) {
+    const id = index.resolve(`danbooru:${member.tag}`, 'character')
     if (!id) {
-      missing.push(tag)
+      missing.push(member.tag)
       continue
     }
     const names = index.card(id)?.names ?? []
-    if (!names.some((n) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(n.text))) nameless.push(tag)
+    if (!names.some((n) => /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(n.text)))
+      nameless.push(member.tag)
+    for (const [form, query] of forms(member)) {
+      const [top] = index.search(query, { kind: 'character', limit: 1 })
+      const row = tally.get(form) ?? { hit: 0, total: 0, misses: [] }
+      row.total++
+      if (top?.id === id) row.hit++
+      else row.misses.push(`${query} → ${top ? index.label(top.id) : '(nothing)'}`)
+      tally.set(form, row)
+    }
   }
   console.log(
-    `\nttheme characters: ${tags.length - missing.length}/${tags.length} resolve, ${nameless.length} of them without a Japanese name`,
+    `\nttheme characters: ${members.length - missing.length}/${members.length} resolve, ${nameless.length} of them without a Japanese name`,
   )
   if (missing.length) console.log(`  missing: ${missing.join(', ')}`)
   if (nameless.length) console.log(`  no Japanese name: ${nameless.join(', ')}`)
+  console.log('\nttheme characters found first (not counted)')
+  for (const [form, row] of tally) {
+    console.log(`  ${form.padEnd(20)} ${row.hit}/${row.total}`)
+    if (process.env.ANINAMES_MISSES) for (const miss of row.misses) console.log(`    ✗ ${miss}`)
+  }
   return missing.length + nameless.length
 }
 

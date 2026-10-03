@@ -2,7 +2,10 @@ import { mkdir } from 'node:fs/promises'
 import { build, DIST } from './build.ts'
 import { evaluate } from './eval.ts'
 import { LAYERS, type Layer } from './model.ts'
+import { pack } from './pack.ts'
+import { probe } from './probe.ts'
 import { Index } from './search.ts'
+import { silver } from './silver.ts'
 import { slice } from './slice.ts'
 import { pick } from './sources/index.ts'
 import { rawDir, writeStage } from './stage.ts'
@@ -31,6 +34,15 @@ async function main(argv: string[]): Promise<void> {
       return
     case 'slice':
       await slice(DIST)
+      return
+    case 'pack':
+      await pack(DIST)
+      return
+    case 'silver':
+      await silver()
+      return
+    case 'probe':
+      await probe(DIST, layersFrom(), Number(rest[0] ?? 300))
       return
     case 'search': {
       const index = new Index(DIST, layersFrom())

@@ -1,7 +1,8 @@
 import { join } from 'node:path'
 import { type Entry, type Name, ref, type Source } from '../model.ts'
 import { download, fresh } from '../net.ts'
-import { hasHangul } from '../text.ts'
+import { hasHangul, isKana } from '../text.ts'
+import { castPairs } from './cast.ts'
 
 const BASE = 'https://dumps.wikimedia.org/kowiki/latest'
 
@@ -249,6 +250,19 @@ function resolve(title: string, targets: Map<string, string>, articles: Map<stri
   return undefined
 }
 
+const ARTICLES = 'pages-articles.xml.bz2'
+
+function underscored(title: string): string {
+  return title.replaceAll(' ', '_')
+}
+
+function subjectOf(page: string): string {
+  return page
+    .replace(/의 등장인물( 목록)?$/, '')
+    .replace(/ 등장인물( 목록)?$/, '')
+    .replace(/^(.+) \(등장인물\)$/, '$1')
+}
+
 function textOf(title: string): string {
   return title.replaceAll('_', ' ')
 }
@@ -273,6 +287,9 @@ export default {
       const path = fileOf(raw, table)
       if (await fresh(path, FRESH_DAYS)) continue
       await download(`${BASE}/kowiki-latest-${table}.sql.gz`, path)
+    }
+    if (!(await fresh(join(raw, ARTICLES), FRESH_DAYS))) {
+      await download(`${BASE}/kowiki-latest-pages-articles.xml.bz2`, join(raw, ARTICLES))
     }
   },
   async *stage(raw) {
@@ -333,6 +350,24 @@ export default {
       }
       const entry: Entry = { id: ref('kowiki', text), attach: true, refs: [ref('wikidata', item)], names }
       yield entry
+    }
+    const pages = join(raw, ARTICLES)
+    if (!(await Bun.file(pages).exists())) return
+    for await (const pair of castPairs(pages)) {
+      const item = articles.get(underscored(subjectOf(pair.page)))
+      if (!item) continue
+      const link = [pair.ja, pair.kana].filter(Boolean)
+      const names: Name[] = [{ text: pair.ko, lang: 'ko', kind: 'official' }]
+      if (pair.ja) names.push({ text: pair.ja, lang: 'ja', kind: 'synonym' })
+      if (pair.kana && isKana(pair.kana)) names.push({ text: pair.kana, lang: 'ja', kind: 'reading' })
+      yield {
+        id: ref('kowiki', `${pair.page}#${pair.ko}`),
+        kind: 'character',
+        attach: true,
+        link,
+        works: [ref('wikidata', item)],
+        names,
+      }
     }
   },
 } satisfies Source

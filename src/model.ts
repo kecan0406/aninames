@@ -42,6 +42,7 @@ export interface Entry {
   related?: Ref[]
   link?: string[]
   rank?: number
+  adult?: boolean
   type?: string
   year?: number
 }

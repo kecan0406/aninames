@@ -9,7 +9,10 @@ All dev commands are mise tasks; package.json has no scripts. The toolchain is b
 - `mise run fetch [source…]` — download raw data into `.cache/raw/<source>/`
 - `mise run stage [source…]` — parse raw data into `.cache/stage/<source>.jsonl`
 - `mise run build` — merge the staged sources into one SQLite file per layer in `dist/`
-- `mise run search <query>` / `mise run eval` — query the built layers / run the golden queries in `tests/golden.ts`
+- `mise run search <query>` / `mise run eval` — query the built layers / run the golden queries in `tests/golden.ts` and the ttheme cast in `tests/ttheme.tsv` (`ANINAMES_LAYERS=core` limits the layers, `ANINAMES_MISSES=1` lists misses)
+- `mise run pack` — zstd-compress the built files into `dist/release`
+- `mise run probe [size]` — search a frozen sample (`tests/probe.json`, made on first run; delete it to draw a new one) of works and characters in three popularity bands by forms of their own names (Japanese, kana, romaji, swapped, short vowels, one-letter typo, Korean, Korean initials, Korean typed on an English keyboard) and Korean Wikipedia spellings with the `kowiki` layer held out; reports first %, MRR and query counts, names several entities share apart
+- `mise run silver` — hide the external ids that join characters across sources, run the merge, and report pairwise recall and precision against them
 - `mise run ci` — lint + typecheck + tests
 
 ## Pipeline
@@ -17,8 +20,12 @@ All dev commands are mise tasks; package.json has no scripts. The toolchain is b
 - A source (`src/sources/<name>.ts`, default export of type `Source` from `src/model.ts`) has a `fetch` that downloads into its raw dir and a `stage` that yields `Entry` records. `src/sources/index.ts` lists the names and loads them lazily.
 - An `Entry` is one work or character as one source sees it: `id` (a `Ref`, `<namespace>:<id>`), `kind`, `refs` (ids in other namespaces the source says are the same thing), `names` (text, BCP 47 `lang` when known — `ja`, `ja-Latn` for romaji, `en`, `ko`, `zh-Hans`, `zh-Hant`, `zh` — and a `NameKind`), `works` (a character's works, as refs), `link` (name texts to attach by when there are no refs), `rank` (the source's own popularity number, higher is more popular), `type`, `year`. `attach: true` means the entry only adds names to an entity found through its refs or link and never creates one; such an entry may omit `kind`.
 - A redirect to a section of an article (`kind: 'section'`, Korean Wikipedia's 페른 → 장송의 프리렌#페른) usually names a character or a part of the work, not the work itself, and ranks well below a real alias.
+- Korean Wikipedia articles also yield cast lists (`src/sources/cast.ts`: the 일본어 표기 template, definition lists and bold names with a Japanese name in parentheses); a pair attaches to the one character of that name in the article's work family.
 - Readings (`kind: 'reading'`, kana) are what Korean names are generated from at build time (`hangulVariants` in `src/text.ts`); a source never generates names itself.
-- The build unions entries of one kind whose refs meet, keyed by the strongest ref.
+- The build unions entries of one kind whose refs meet, keyed by the strongest ref (entity ids are `w/<ref>` and `c/<ref>`). It never joins two different Wikidata items, however their refs overlap. Works without a shared ref merge by a Japanese title each source gives one work of the same medium, within a year. Characters merge by name with evidence: a name both sides share and a work both appear in (a Danbooru qualifier counts as a work when it names one) merges even short names, as long as no other entity of either source could claim it; without a shared work the name must be official on at least one side, not short, and the only one of its kind in both sources. Danbooru variant tags with two qualifiers never merge across sources.
+- Popularity is each source's count on a log scale against its own 99th percentile, averaged over the sources that know the entity: Wikidata sitelinks, anime-offline-database tag count × score, VNDB votes weighted by role (heroines over protagonist over side and cameo), Bangumi collections, Danbooru posts (characters) and copyright posts (works, attached by Japanese title).
+- `related` (Wikidata's based on, derivative, series, part, franchise, follows) ties works into families: a query matching a franchise also lifts the anime in its family whose own names contain the query, and family members share popularity.
+- `adult` marks a work; a character is adult when all its works are. Search returns them flagged and filters them only on request.
 
 ## Layers and licenses
 

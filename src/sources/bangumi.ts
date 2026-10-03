@@ -84,6 +84,7 @@ interface Subject {
   infobox: string
   platform: number
   date?: string
+  nsfw?: boolean
   series?: boolean
   tags?: { name: string }[]
   meta_tags?: string[]
@@ -252,6 +253,7 @@ function workOf(subject: Subject, type: string, chinese: boolean): Entry {
   }
   const refs = refsOf(found, '链接', /vndb\.org\/(v\d+)/)
   if (refs.length > 0) entry.refs = refs
+  if (subject.nsfw) entry.adult = true
   const year = Number(subject.date?.slice(0, 4))
   if (year > 0) entry.year = year
   return entry
@@ -286,6 +288,8 @@ function characterOf(
   return entry
 }
 
+const GAME_FAVORITES = 100
+
 const source: Source = {
   name: 'bangumi',
   layer: 'unlicensed',
@@ -307,12 +311,15 @@ const source: Source = {
     await Bun.write(marker, `${JSON.stringify(meta)}\n`)
   },
   async *stage(raw) {
+    const cast = new Set<number>()
+    for await (const each of records<Cast>(join(raw, CASTS))) cast.add(each.subject_id)
     const works = new Map<number, Work>()
     for await (const subject of records<Subject>(join(raw, SUBJECTS))) {
       const type = typeOf(subject)
       if (!type) continue
       const region = regionOf(subject.meta_tags ?? [])
       const entry = workOf(subject, type, region === 'zh')
+      if (type === 'GAME' && !cast.has(subject.id) && !entry.refs && (entry.rank ?? 0) < GAME_FAVORITES) continue
       works.set(subject.id, { rank: entry.rank ?? 0, region })
       yield entry
     }

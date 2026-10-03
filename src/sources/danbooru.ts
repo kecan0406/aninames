@@ -10,6 +10,10 @@ const MIN_POSTS = 5
 
 const CHARACTER = 4
 
+const COPYRIGHT = 3
+
+const MIN_WORK_POSTS = 100
+
 const PAGE = 1000
 
 const PACE = 1000
@@ -18,7 +22,13 @@ const TRIES = 4
 
 const DAYS = 7
 
-const FILES = { tags: 'tags.json', aliases: 'aliases.json', wiki: 'wiki.json' } as const
+const FILES = {
+  tags: 'tags.json',
+  aliases: 'aliases.json',
+  wiki: 'wiki.json',
+  works: 'works.json',
+  titles: 'titles.json',
+} as const
 
 type Part = keyof typeof FILES
 
@@ -77,6 +87,21 @@ const QUERIES: Record<Part, { path: string; search: Record<string, string>; only
     },
     only: 'id,title,other_names',
   },
+  works: {
+    path: '/tags.json',
+    search: { 'search[category]': `${COPYRIGHT}`, 'search[post_count]': `>=${MIN_WORK_POSTS}` },
+    only: 'id,name,post_count,is_deprecated',
+  },
+  titles: {
+    path: '/wiki_pages.json',
+    search: {
+      'search[is_deleted]': 'false',
+      'search[other_names_present]': 'true',
+      'search[tag][category]': `${COPYRIGHT}`,
+      'search[tag][post_count]': `>=${MIN_WORK_POSTS}`,
+    },
+    only: 'id,title,other_names',
+  },
 }
 
 let requests = 0
@@ -132,24 +157,30 @@ async function collect<T extends Row>(part: Part, keep: (row: T) => void): Promi
   console.log(`danbooru ${part}: ${count} in ${page} pages`)
 }
 
+async function tagsOf(part: 'tags' | 'works'): Promise<Tag[]> {
+  const tags: Tag[] = []
+  await collect<TagRow>(part, (row) =>
+    tags.push({ name: row.name, post_count: row.post_count, is_deprecated: row.is_deprecated }),
+  )
+  return tags.sort((a, b) => b.post_count - a.post_count || a.name.localeCompare(b.name))
+}
+
+async function pagesOf(part: 'wiki' | 'titles'): Promise<Record<string, string[]>> {
+  const wiki = new Map<string, string[]>()
+  await collect<WikiRow>(part, (row) => wiki.set(row.title, row.other_names))
+  return Object.fromEntries([...wiki].sort(([a], [b]) => a.localeCompare(b)))
+}
+
 const FETCHERS: Record<Part, () => Promise<unknown>> = {
-  async tags() {
-    const tags: Tag[] = []
-    await collect<TagRow>('tags', (row) =>
-      tags.push({ name: row.name, post_count: row.post_count, is_deprecated: row.is_deprecated }),
-    )
-    return tags.sort((a, b) => b.post_count - a.post_count || a.name.localeCompare(b.name))
-  },
+  tags: () => tagsOf('tags'),
+  works: () => tagsOf('works'),
+  titles: () => pagesOf('titles'),
   async aliases() {
     const aliases = new Map<string, string>()
     await collect<AliasRow>('aliases', (row) => aliases.set(row.antecedent_name, row.consequent_name))
     return Object.fromEntries([...aliases].sort(([a], [b]) => a.localeCompare(b)))
   },
-  async wiki() {
-    const wiki = new Map<string, string[]>()
-    await collect<WikiRow>('wiki', (row) => wiki.set(row.title, row.other_names))
-    return Object.fromEntries([...wiki].sort(([a], [b]) => a.localeCompare(b)))
-  },
+  wiki: () => pagesOf('wiki'),
 }
 
 function countOf(value: unknown): number {
@@ -272,6 +303,19 @@ export default {
     for (const tag of tags) {
       if (tag.is_deprecated) continue
       yield entryOf(tag, (synonyms.get(tag.name) ?? []).sort(), wiki.get(tag.name) ?? [], owners)
+    }
+    const titles = new Map(Object.entries(await read<Record<string, string[]>>(raw, 'titles')))
+    for (const tag of await read<Tag[]>(raw, 'works')) {
+      if (tag.is_deprecated) continue
+      const others = (titles.get(tag.name) ?? []).map(display).filter(usable)
+      const link = others.filter((text) => hasKana(text) || hasKanji(text))
+      if (link.length === 0) continue
+      const names: Name[] = [{ text: display(tag.name), kind: 'main' }]
+      for (const text of others) {
+        const lang = langOf(text)
+        names.push(lang ? { text, lang, kind: 'synonym' } : { text, kind: 'synonym' })
+      }
+      yield { id: ref('danbooru', tag.name), kind: 'work', attach: true, link, names, rank: tag.post_count }
     }
   },
 } satisfies Source

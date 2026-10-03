@@ -16,6 +16,10 @@ run = "bun src/cli.ts stage"
 description = "merge the staged sources into one SQLite file per layer in dist/"
 run = "bun src/cli.ts build"
 
+[tasks.pack]
+description = "zstd-compress the built files into dist/release for publishing"
+run = "bun src/cli.ts pack"
+
 [tasks.search]
 description = "search the built layers: mise run search <query>"
 run = "bun src/cli.ts search"
@@ -23,6 +27,14 @@ run = "bun src/cli.ts search"
 [tasks.eval]
 description = "run the golden queries against the built layers"
 run = "bun src/cli.ts eval"
+
+[tasks.probe]
+description = "search popular entities by perturbed forms of their own names: mise run probe [sample size]"
+run = "bun src/cli.ts probe"
+
+[tasks.silver]
+description = "measure character merging against the cross-source ids it is not shown"
+run = "bun src/cli.ts silver"
 
 [tasks.test]
 description = "unit tests"

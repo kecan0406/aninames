@@ -304,6 +304,11 @@ export function latinKey(text: string): string {
   return tokens.sort().join(' ')
 }
 
+export function partKey(token: string): string {
+  const key = flat(token)
+  return /^[a-z0-9]+$/.test(key) ? latinKey(token).replace(/\s+/g, '') : key
+}
+
 export function qualifiers(text: string): { base: string; quals: string[] } {
   const quals: string[] = []
   const base = text
@@ -473,12 +478,12 @@ const STANDARD_MEDIAL: Record<string, string> = {
   じょ: '조',
 }
 
-function addFinal(syllable: string, final: 'n' | 's'): string {
+function addFinal(syllable: string, final: 'n' | 's' | 'l'): string {
   const code = (syllable.codePointAt(0) ?? 0) - 0xac00
   if (code < 0 || code >= 11172 || code % 28 !== 0) {
     return syllable
   }
-  return String.fromCodePoint(0xac00 + code + (final === 'n' ? 4 : 19))
+  return String.fromCodePoint(0xac00 + code + (final === 'n' ? 4 : final === 's' ? 19 : 8))
 }
 
 function vowelOf(syllable: string): string {
@@ -528,11 +533,99 @@ export function kanaToHangul(kana: string, style: HangulStyle): string {
   return converted.length === 0 || converted.some((word) => !word) ? '' : converted.join(' ')
 }
 
-export function hangulVariants(kana: string): string[] {
-  const out = new Set<string>()
-  for (const style of ['standard', 'fan', 'fan-long'] as const) {
-    const text = kanaToHangul(kana, style)
-    if (text) out.add(text)
+export function initials(text: string): string {
+  let out = ''
+  for (const ch of text.normalize('NFC')) {
+    const code = (ch.codePointAt(0) ?? 0) - 0xac00
+    if (code >= 0 && code < 11172) out += 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'[Math.floor(code / 588)] ?? ''
   }
-  return [...out]
+  return out
+}
+
+export function editDistance(a: string, b: string, limit: number): number {
+  const x = [...a]
+  const y = [...b]
+  if (Math.abs(x.length - y.length) > limit) return limit + 1
+  let before = Array.from({ length: y.length + 1 }, (_, j) => j)
+  let previous = before
+  for (let i = 1; i <= x.length; i++) {
+    const current = [i]
+    let best = i
+    for (let j = 1; j <= y.length; j++) {
+      const cost = x[i - 1] === y[j - 1] ? 0 : 1
+      let value = Math.min((previous[j] ?? 0) + 1, (current[j - 1] ?? 0) + 1, (previous[j - 1] ?? 0) + cost)
+      if (i > 1 && j > 1 && x[i - 1] === y[j - 2] && x[i - 2] === y[j - 1])
+        value = Math.min(value, (before[j - 2] ?? 0) + 1)
+      current.push(value)
+      best = Math.min(best, value)
+    }
+    if (best > limit) return limit + 1
+    before = previous
+    previous = current
+  }
+  return previous[y.length] ?? limit + 1
+}
+
+const LOAN: Record<string, string> = {
+  く: '크',
+  ぐ: '그',
+  す: '스',
+  ず: '즈',
+  つ: '츠',
+  ふ: '프',
+  ぶ: '브',
+  ぷ: '프',
+  む: '므',
+  る: '르',
+  と: '트',
+  ど: '드',
+}
+
+function loanWord(word: string, double: boolean): string {
+  const parts = syllables(word)
+  const out: string[] = []
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i] ?? ''
+    const next = parts[i + 1]
+    const vowelNext = next === undefined || /^[あいうえおー]/.test(next) || next === 'ん'
+    const ending = next === undefined
+    const loose = LOAN[part] && ((part !== 'と' && part !== 'ど' && !vowelNext) || ending)
+    if (part === 'ー') continue
+    if (part === 'ん' || part === 'っ') {
+      const last = out.pop()
+      if (last === undefined) return ''
+      out.push(addFinal(last, part === 'ん' ? 'n' : 's'))
+      continue
+    }
+    const syllable = loose ? LOAN[part] : FAN[part]
+    if (!syllable) return ''
+    const previous = out.at(-1)
+    if (double && previous && /^[크그프브]$/.test(previous) && /^[らりるれろ]/.test(part)) {
+      out.pop()
+      out.push(addFinal(previous, 'l'))
+    }
+    out.push(syllable)
+  }
+  return out.join('')
+}
+
+export function hangulForms(kana: string): { text: string; preferred: boolean }[] {
+  const out = new Map<string, boolean>()
+  const fan = kanaToHangul(kana, 'fan')
+  if (fan) out.set(fan, true)
+  for (const style of ['fan-long', 'standard'] as const) {
+    const text = kanaToHangul(kana, style)
+    if (text && !out.has(text)) out.set(text, false)
+  }
+  if (/^[\p{Script=Katakana}ー・\s]+$/u.test(kana)) {
+    const words = toHiragana(kana.normalize('NFKC'))
+      .split(/[\s・·=＝]+/)
+      .filter(Boolean)
+    for (const double of [false, true]) {
+      const loan = words.map((word) => loanWord(word, double))
+      const text = loan.every(Boolean) ? loan.join(' ') : ''
+      if (text && !out.has(text)) out.set(text, false)
+    }
+  }
+  return [...out].map(([text, preferred]) => ({ text, preferred }))
 }

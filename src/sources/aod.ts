@@ -36,6 +36,7 @@ interface Anime {
   synonyms: string[]
   animeSeason?: { year?: number }
   score?: { arithmeticMean: number }
+  tags?: string[]
 }
 
 function refOf(url: string): Ref | undefined {
@@ -88,6 +89,8 @@ function entryOf(anime: Anime): Entry | undefined {
   }
   const year = anime.animeSeason?.year
   if (year) entry.year = year
+  if (anime.tags?.includes('hentai')) entry.adult = true
+  if (anime.tags?.length) entry.rank = anime.tags.length * (anime.score?.arithmeticMean ?? 6)
   return entry
 }
 
