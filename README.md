@@ -2,7 +2,7 @@
 
 A multilingual alias index for anime titles and characters. Type a title or a character name the way you know it — 後藤ひとり, gotou hitori, Hitori Gotoh, 고토 히토리, ぼざろ, 봇치 더 록, 孤独摇滚 — and get the work or the character.
 
-aninames ships data files, not a service: a scheduled build merges open data sources into one SQLite file per license layer, and a small search library joins the layers on your machine.
+aninames ships data files, not a service: a scheduled build merges open data sources into one SQLite file per license layer, and a small search library joins the layers on your machine. The same build also cuts the search keys into small static files, so a client can search without downloading the databases (see [Static index](#static-index)).
 
 ## Layers
 
@@ -44,7 +44,34 @@ Built sizes: `core.sqlite` 610 MB, `kowiki.sqlite` 25 MB, `unlicensed.sqlite` 83
 
 ## Releases
 
-`.github/workflows/release.yml` fetches every source, builds, runs `eval` and packs every Sunday (and on demand), then publishes the files as a `data-<date>` release, keeping the four latest. The latest is always at `https://github.com/kecan0406/aninames/releases/latest/download/<file>` — ttheme reads `ttheme.json` there once a day and downloads the slices whose hash changed.
+`.github/workflows/release.yml` fetches every source, builds, runs `eval`, packs and chunks every Sunday (and on demand), then publishes the files as a `data-<date>` release, keeping the four latest, and deploys `dist/site` to GitHub Pages as the static index. The latest release is always at `https://github.com/kecan0406/aninames/releases/latest/download/<file>` — ttheme reads `ttheme.json` there once a day and downloads the slices whose hash changed.
+
+## Static index
+
+`https://names.ttheme.dev/` serves each layer's search keys as sorted, gzip'd JSON files, so a search fetches only the few files its query needs instead of the databases (610, 25 and 830 MB). `mise run chunk` writes it to `dist/site`:
+
+| Path | Holds |
+|---|---|
+| `manifest.json` | the format number, the build time and, for every layer and table, each file's lower bound (prefix-compressed against the one before) and name |
+| `<layer>/<table>/<hash>.json.gz` | about 32 KB of JSON rows sorted by key (16 KB for `entity`), named by the first 48 bits of the SHA-256 of the file |
+| `NOTICE.md`, `index.html` | each layer's sources and terms |
+
+The key tables are `flat` (folded names), `latin` (romaji keys), `sound` (sound keys across kana, Hangul and romaji), `part` (name tokens) and `initial` (Korean initials); their rows are `[key, entity number, name weight, flags, popularity, standing, bonus]`. `entity` rows, keyed by entity number (which follows the entity ids' order), carry the id, names, Danbooru tags, works and family of one entity in that layer. Layers stay in separate files; the only values a file carries from other layers are derived numbers and flags (popularity, family standing, adult, which layers know the entity).
+
+On the 10-04 build: 19,167 files, 149 MB gzip'd, a manifest of 236 KB gzip'd. `mise run compare` searches the probe sample (4,370 queries) both ways: the files find the entity first 87% of the time, SQLite 86% (FTS substring search is not in the files; typo search reads the rows around the query's position instead). A cold query needs a median of 2 rounds (p90 3), 31 files (p90 78) and 287 KB (p90 584 KB).
+
+The client is `@kecan0406/aninames` (`src/client/`), plain TypeScript for Node 22 and Bun that depends only on `es-hangul`:
+
+```ts
+import { cachedSource, httpSource, Names } from '@kecan0406/aninames'
+
+const source = cachedSource(httpSource('https://names.ttheme.dev'), `${cacheDir}/aninames`)
+const names = new Names(source, { layers: ['core', 'kowiki'] })
+const [first] = await names.search('봇치', { limit: 10, signal })
+const works = await names.lookup(first?.works ?? [])
+```
+
+`search` returns `Found` cards (`id`, `kind`, `label`, `names`, `danbooru` tags with the most posts first, `works`, `score`, `adult`); `search(query, { kind, limit, adult: false })` narrows it, and `lookup(ids)` returns the cards of given ids in one round. `cachedSource` keeps the files it fetched forever (their names are hashes of their contents), revalidates the manifest with its ETag or Last-Modified once a day (`maxAge`), answers from the cache when offline, refetches the manifest when the site has moved on to a new build, and deletes files a new manifest no longer names. `fileSource(dir)` reads a local `dist/site`.
 
 ## Development
 
@@ -56,6 +83,9 @@ mise run search 고토 히토리
 mise run eval     # golden queries and the ttheme cast
 mise run probe    # search popular to long-tail entities by forms of their names
 mise run silver   # measure character merging against hidden cross-source ids
+mise run chunk    # write the static index to dist/site
+mise run compare  # search the probe sample with SQLite and with the client over dist/site
+mise run lib      # compile the client into lib/ for the npm package
 ```
 
 Code is MIT-licensed (see `LICENSE`); the data files carry the licenses above.
