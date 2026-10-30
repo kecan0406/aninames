@@ -99,7 +99,10 @@ export default {
   layer: 'core',
   license: 'ODbL-1.0 AND DbCL-1.0',
   async fetch(raw) {
-    const release = await json<Release>(RELEASES, { headers: { Accept: 'application/vnd.github+json' } })
+    const token = process.env.GITHUB_TOKEN
+    const release = await json<Release>(RELEASES, {
+      headers: { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    })
     const marker = Bun.file(join(raw, 'release.json'))
     const known = (await marker.exists()) ? ((await marker.json()) as { tag: string }) : undefined
     if (known?.tag === release.tag_name && (await Bun.file(join(raw, FILE)).exists())) return
