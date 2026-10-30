@@ -19,11 +19,21 @@ jobs:
       fresh: ${{ steps.fresh.outcome }}
     env:
       ANINAMES_DANBOORU: https://shima.donmai.us
+      ANINAMES_DANBOORU_LOGIN: ${{ secrets.DANBOORU_LOGIN }}
+      ANINAMES_DANBOORU_KEY: ${{ secrets.DANBOORU_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: jdx/mise-action@v2
       - run: bun install --frozen-lockfile
       - run: mise run ci
+      - name: Keep Danbooru's last answer for a week it does not answer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p .cache/raw/danbooru
+          if gh release download --pattern danbooru.tar.gz --dir .cache; then
+            tar -xzf .cache/danbooru.tar.gz -C .cache/raw/danbooru
+          fi
       - name: Build from the sources
         id: fresh
         continue-on-error: true
@@ -33,6 +43,7 @@ jobs:
           bun src/cli.ts build
           bun src/cli.ts eval
           bun src/cli.ts pack
+          tar -czf dist/release/danbooru.tar.gz -C .cache/raw/danbooru .
       - name: Take the latest data release when the sources did not load
         if: steps.fresh.outcome != 'success'
         env:

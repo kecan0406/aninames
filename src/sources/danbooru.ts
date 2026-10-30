@@ -6,6 +6,13 @@ import { hasHangul, hasKanji, qualifiers } from '../text.ts'
 
 const HOST = (process.env.ANINAMES_DANBOORU ?? 'https://danbooru.donmai.us').replace(/\/+$/, '')
 
+const LOGIN = process.env.ANINAMES_DANBOORU_LOGIN ?? ''
+
+const KEY = process.env.ANINAMES_DANBOORU_KEY ?? ''
+
+const AUTH: Record<string, string> =
+  LOGIN && KEY ? { Authorization: `Basic ${Buffer.from(`${LOGIN}:${KEY}`).toString('base64')}` } : {}
+
 const MIN_POSTS = 5
 
 const CHARACTER = 4
@@ -116,7 +123,7 @@ async function get<T>(url: string): Promise<T> {
     last = Date.now()
     requests++
     try {
-      return await json<T>(url)
+      return await json<T>(url, { headers: AUTH })
     } catch (error) {
       failure = error
     }
@@ -277,9 +284,18 @@ export default {
       return
     }
     requests = 0
+    const fetched = new Map<Part, unknown>()
+    try {
+      for (const part of stale) fetched.set(part, await FETCHERS[part]())
+    } catch (error) {
+      const kept = await Promise.all(Object.values(FILES).map((file) => Bun.file(join(raw, file)).exists()))
+      if (!known || !kept.every(Boolean)) throw error
+      const reason = error instanceof Error ? error.message.replace(/^aninames: /, '') : String(error)
+      console.log(`::warning::danbooru did not answer (${reason}); staging its raw files from ${known.date}`)
+      return
+    }
     const counts = { ...known?.counts } as Record<Part, number>
-    for (const part of stale) {
-      const value = await FETCHERS[part]()
+    for (const [part, value] of fetched) {
       await save(join(raw, FILES[part]), value)
       counts[part] = countOf(value)
     }
