@@ -26,14 +26,16 @@ jobs:
       - uses: jdx/mise-action@v2
       - run: bun install --frozen-lockfile
       - run: mise run ci
-      - name: Keep Danbooru's last answer for a week it does not answer
+      - name: Keep the last answers of Danbooru and Wikidata for a week they do not answer
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p .cache/raw/danbooru
-          if gh release download --pattern danbooru.tar.gz --dir .cache; then
-            tar -xzf .cache/danbooru.tar.gz -C .cache/raw/danbooru
-          fi
+          for source in danbooru wikidata; do
+            mkdir -p ".cache/raw/$source"
+            if gh release download --pattern "$source.tar.gz" --dir .cache; then
+              tar -xzf ".cache/$source.tar.gz" -C ".cache/raw/$source"
+            fi
+          done
       - name: Build from the sources
         id: fresh
         continue-on-error: true
@@ -43,7 +45,9 @@ jobs:
           bun src/cli.ts build
           bun src/cli.ts eval
           bun src/cli.ts pack
-          tar -czf dist/release/danbooru.tar.gz -C .cache/raw/danbooru .
+          for source in danbooru wikidata; do
+            tar -czf "dist/release/$source.tar.gz" -C ".cache/raw/$source" .
+          done
       - name: Take the latest data release when the sources did not load
         if: steps.fresh.outcome != 'success'
         env:

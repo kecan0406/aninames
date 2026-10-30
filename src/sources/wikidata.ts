@@ -2,6 +2,9 @@ import { rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Entry, Kind, Name, Namespace, Ref, Source } from '../model.ts'
 import { ref, USER_AGENT } from '../model.ts'
+import { sleep } from '../net.ts'
+
+const MOST_WAIT = 120
 
 interface Endpoint {
   name: string
@@ -198,7 +201,7 @@ interface Results {
   results: { bindings: Record<string, Term>[] }
 }
 
-async function ask(endpoint: Endpoint, query: string): Promise<{ text: string; rows: number }> {
+async function ask(endpoint: Endpoint, query: string, again = true): Promise<{ text: string; rows: number }> {
   const res = await fetch(endpoint.url, {
     method: 'POST',
     headers: {
@@ -209,6 +212,13 @@ async function ask(endpoint: Endpoint, query: string): Promise<{ text: string; r
     body: new URLSearchParams({ query }),
     signal: AbortSignal.timeout(endpoint.timeout),
   })
+  const wait = Number(res.headers.get('retry-after'))
+  if (res.status === 429 && again && wait > 0 && wait <= MOST_WAIT) {
+    await res.body?.cancel()
+    console.log(`wikidata: ${endpoint.name} asks to wait ${wait} s`)
+    await sleep(wait * 1000)
+    return ask(endpoint, query, false)
+  }
   if (!res.ok) {
     await res.body?.cancel()
     throw new Error(`answered ${res.status}`)
@@ -298,9 +308,13 @@ async function fetchAll(raw: string): Promise<void> {
       if (!answer) {
         const tried = misses.filter((miss) => miss.file === query.file)
         const reasons = tried.map((miss) => `${miss.endpoint} ${miss.error}`).join(', ')
-        throw new Error(`aninames: wikidata ${query.file} failed on every endpoint (${reasons})`)
+        if (!(await Bun.file(join(raw, `${query.file}.json`)).exists())) {
+          throw new Error(`aninames: wikidata ${query.file} failed on every endpoint (${reasons})`)
+        }
+        console.log(`::warning::wikidata ${query.file} failed on every endpoint (${reasons}); staging its last answer`)
+      } else {
+        answers.push(answer)
       }
-      answers.push(answer)
       endpoints = endpoints.filter(
         (endpoint) => endpoint === ENDPOINTS.at(-1) || !misses.some((miss) => miss.endpoint === endpoint.name),
       )
