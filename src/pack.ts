@@ -67,3 +67,12 @@ export async function pack(dir: string): Promise<void> {
   await Bun.write(join(target, 'NOTICE.md'), await notice())
   console.log(`pack: ${(before / 1e6).toFixed(0)} MB → ${(after / 1e6).toFixed(0)} MB in ${target}`)
 }
+
+export async function unpack(dir: string): Promise<void> {
+  const source = join(dir, 'release')
+  for (const name of (await readdir(source)).filter((file) => file.endsWith('.sqlite.zst')).sort()) {
+    const data = Bun.zstdDecompressSync(await Bun.file(join(source, name)).bytes())
+    await Bun.write(join(dir, name.slice(0, -'.zst'.length)), data)
+    console.log(`unpack: ${name} → ${(data.byteLength / 1e6).toFixed(1)} MB`)
+  }
+}

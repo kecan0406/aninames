@@ -15,6 +15,8 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 300
+    outputs:
+      fresh: ${{ steps.fresh.outcome }}
     env:
       ANINAMES_DANBOORU: https://shima.donmai.us
     steps:
@@ -22,16 +24,29 @@ jobs:
       - uses: jdx/mise-action@v2
       - run: bun install --frozen-lockfile
       - run: mise run ci
-      - run: bun src/cli.ts fetch
-      - run: bun src/cli.ts stage
-      - run: bun src/cli.ts build
-      - run: bun src/cli.ts eval
-      - run: bun src/cli.ts pack
+      - name: Build from the sources
+        id: fresh
+        continue-on-error: true
+        run: |
+          bun src/cli.ts fetch
+          bun src/cli.ts stage
+          bun src/cli.ts build
+          bun src/cli.ts eval
+          bun src/cli.ts pack
+      - name: Take the latest data release when the sources did not load
+        if: steps.fresh.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          rm -rf dist
+          gh release download --pattern '*.sqlite.zst' --dir dist/release
+          bun src/cli.ts unpack
       - run: bun src/cli.ts chunk
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist/site
       - name: Publish
+        if: steps.fresh.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -54,3 +69,12 @@ jobs:
     steps:
       - id: deploy
         uses: actions/deploy-pages@v5
+
+  stale:
+    needs: [release, pages]
+    if: needs.release.outputs.fresh != 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::The sources did not load, so the site was built from the latest data release"
+          exit 1

@@ -4,7 +4,7 @@ import { compare } from './compare.ts'
 import { evaluate } from './eval.ts'
 import { chunk } from './files.ts'
 import { LAYERS, type Layer } from './model.ts'
-import { pack } from './pack.ts'
+import { pack, unpack } from './pack.ts'
 import { probe } from './probe.ts'
 import { Index } from './search.ts'
 import { silver } from './silver.ts'
@@ -36,6 +36,9 @@ async function main(argv: string[]): Promise<void> {
       return
     case 'slice':
       await slice(DIST)
+      return
+    case 'unpack':
+      await unpack(DIST)
       return
     case 'pack':
       await pack(DIST)

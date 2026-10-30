@@ -10,7 +10,7 @@ All dev commands are mise tasks; package.json has no scripts. The toolchain is b
 - `mise run stage [source…]` — parse raw data into `.cache/stage/<source>.jsonl`
 - `mise run build` — merge the staged sources into one SQLite file per layer in `dist/`
 - `mise run search <query>` / `mise run eval` — query the built layers / run the golden queries in `tests/golden.ts` and the ttheme cast in `tests/ttheme.tsv` (`ANINAMES_LAYERS=core` limits the layers, `ANINAMES_MISSES=1` lists misses)
-- `mise run pack` — zstd-compress the built files into `dist/release`
+- `mise run pack` — zstd-compress the built files into `dist/release`; `bun src/cli.ts unpack` turns the `.sqlite.zst` files there back into `dist/*.sqlite`, which the weekly workflow does with the latest data release when a source does not load, so the static site still deploys and the run still fails
 - `mise run chunk [bytes]` — cut each layer's search keys and entity rows into sorted gzip'd JSON files of about 32 KB in `dist/site` (the static index served at `names.ttheme.dev`): `<layer>/<table>/<hash>.json.gz`, `manifest.json`, `CNAME`, `NOTICE.md`, `index.html`
 - `mise run compare [per band]` — search the probe sample with SQLite and with the client (`src/client/`) over `dist/site`; prints first % per form and rounds, files and KB per cold query, and fails when the files find fewer entities first than SQLite
 - `mise run lib` — compile the client into `lib/` (JavaScript and `.d.ts`) for the npm package
