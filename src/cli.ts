@@ -1,6 +1,8 @@
 import { mkdir } from 'node:fs/promises'
 import { build, DIST } from './build.ts'
+import { compare } from './compare.ts'
 import { evaluate } from './eval.ts'
+import { chunk } from './files.ts'
 import { LAYERS, type Layer } from './model.ts'
 import { pack } from './pack.ts'
 import { probe } from './probe.ts'
@@ -38,6 +40,14 @@ async function main(argv: string[]): Promise<void> {
     case 'pack':
       await pack(DIST)
       return
+    case 'chunk':
+      await chunk(DIST, Number(rest[0] ?? 32_768))
+      return
+    case 'compare': {
+      const failed = await compare(DIST, layersFrom(), Number(rest[0] ?? 150))
+      process.exitCode = failed ? 1 : 0
+      return
+    }
     case 'silver':
       await silver()
       return
@@ -64,7 +74,9 @@ async function main(argv: string[]): Promise<void> {
       return
     }
     default:
-      throw new Error(`aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, search or eval`)
+      throw new Error(
+        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, slice, pack, chunk, search, eval, probe, compare or silver`,
+      )
   }
 }
 

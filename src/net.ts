@@ -1,7 +1,6 @@
 import { mkdir, rename, stat } from 'node:fs/promises'
 import { dirname } from 'node:path'
-
-export const USER_AGENT = 'aninames/0.0 (+https://github.com/kecan0406/aninames)'
+import { USER_AGENT } from './model.ts'
 
 export async function download(url: string, path: string, headers: Record<string, string> = {}): Promise<void> {
   await mkdir(dirname(path), { recursive: true })

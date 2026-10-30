@@ -1,0 +1,230 @@
+import { gunzipSync } from 'node:zlib'
+import { type Kind, LAYERS, type Layer, type NameKind } from '../model.ts'
+import { type Rows, View } from './chunks.ts'
+import { search } from './engine.ts'
+import { type EntityRow, type Manifest, parsePath, readManifest, readRows } from './format.ts'
+import { Missing, type Source } from './source.ts'
+
+export interface Found {
+  id: string
+  kind: Kind
+  label: string
+  names: { text: string; lang: string | null }[]
+  danbooru: string[]
+  works: string[]
+  score: number
+  adult: boolean
+}
+
+export interface Trace {
+  rounds: number
+  labels: number
+  files: number
+  bytes: number
+}
+
+const KEEP = 256
+const PARALLEL = 16
+const TIMEOUT = 30_000
+const LABEL_LANGS = ['ja', 'en', 'ja-Latn', 'ko']
+const SHOWN: ReadonlySet<NameKind> = new Set(['main', 'official', 'synonym', 'short'])
+
+const traces = new WeakMap<Names, Trace>()
+
+export function trace(names: Names): Readonly<Trace> {
+  return traces.get(names) ?? { rounds: 0, labels: 0, files: 0, bytes: 0 }
+}
+
+function race<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise
+  signal.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const stop = () => reject(signal.reason)
+    signal.addEventListener('abort', stop, { once: true })
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', stop))
+  })
+}
+
+export function decode(path: string, bytes: Uint8Array): Rows {
+  const where = parsePath(path)
+  let rows: Rows | undefined
+  try {
+    const text = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes
+    rows = where && readRows(where.table, JSON.parse(new TextDecoder().decode(text)))
+  } catch {
+    rows = undefined
+  }
+  if (!rows) throw new Error(`aninames: ${path} is not a chunk file`)
+  return rows
+}
+
+function label(id: string, rows: EntityRow[]): string {
+  const names = rows.flatMap((row) => row.names)
+  for (const lang of LABEL_LANGS) {
+    for (const trust of [0, 1, 2, 3, undefined]) {
+      const found = names.find(
+        (n) =>
+          n.lang === lang && (n.kind === 'official' || n.kind === 'main') && (trust === undefined || n.trust === trust),
+      )
+      if (found) return found.text
+    }
+  }
+  return names.find((n) => n.kind === 'main')?.text ?? names[0]?.text ?? id
+}
+
+function card(rows: EntityRow[], score: number, adult: boolean): Found {
+  const head = rows[0] as EntityRow
+  const seen = new Set<string>()
+  const names: Found['names'] = []
+  for (const name of rows.flatMap((row) => row.names)) {
+    const key = `${name.lang ?? ''}\u0000${name.text}`
+    if (!SHOWN.has(name.kind) || seen.has(key)) continue
+    seen.add(key)
+    names.push({ text: name.text, lang: name.lang })
+  }
+  const posts = new Map<string, number | null>()
+  for (const [tag, count] of rows.flatMap((row) => row.danbooru)) {
+    if (!posts.has(tag) || (count ?? -1) > (posts.get(tag) ?? -1)) posts.set(tag, count)
+  }
+  const danbooru = [...posts]
+    .map(([tag, count], at) => ({ tag, count, at }))
+    .sort((a, b) => (b.count ?? -1) - (a.count ?? -1) || a.at - b.at)
+    .map((entry) => entry.tag)
+  const works = head.kind === 'character' ? [...new Set(rows.flatMap((row) => row.works.map(([, id]) => id)))] : []
+  return { id: head.id, kind: head.kind, label: label(head.id, rows), names, danbooru, works, score, adult }
+}
+
+interface State {
+  text: string
+  manifest: Manifest
+}
+
+export class Names {
+  readonly #source: Source
+  readonly #layers: readonly Layer[]
+  #state: Promise<State> | undefined
+  readonly #cache = new Map<string, Rows>()
+  readonly #loading = new Map<string, Promise<void>>()
+  readonly #queue: (() => void)[] = []
+  #active = 0
+  #runs = 0
+
+  constructor(source: Source, options: { layers?: Layer[] } = {}) {
+    this.#source = source
+    this.#layers = options.layers ?? LAYERS
+    traces.set(this, { rounds: 0, labels: 0, files: 0, bytes: 0 })
+  }
+
+  search(
+    query: string,
+    options: { kind?: Kind; limit?: number; adult?: boolean; signal?: AbortSignal } = {},
+  ): Promise<Found[]> {
+    const { signal, ...rest } = options
+    return this.#run(signal, (view) => {
+      const hits = search(view, query, rest)
+      if (!hits) return undefined
+      view.labels = true
+      const out = hits.flatMap((hit) => {
+        const rows = view.entity(hit.eid, hit.mask)
+        return rows.length > 0 ? [card(rows, hit.score, hit.adult)] : []
+      })
+      return view.wanted.size > 0 ? undefined : out
+    })
+  }
+
+  lookup(ids: string[], signal?: AbortSignal): Promise<Found[]> {
+    const wanted = [...new Set(ids.filter((id) => typeof id === 'string'))]
+    return this.#run(signal, (view) => {
+      view.labels = true
+      const out = wanted.flatMap((id) => {
+        const rows = view.byId(id)
+        return rows.length > 0 ? [card(rows, 0, (rows[0] as EntityRow).adult)] : []
+      })
+      return view.wanted.size > 0 ? undefined : out
+    })
+  }
+
+  #open(): Promise<State> {
+    if (this.#state) return this.#state
+    const state = this.#source
+      .manifest(AbortSignal.timeout(TIMEOUT))
+      .then((text) => ({ text, manifest: readManifest(text) }))
+    this.#state = state
+    state.catch(() => {
+      if (this.#state === state) this.#state = undefined
+    })
+    return state
+  }
+
+  #view(manifest: Manifest): View {
+    const layers = LAYERS.filter(
+      (layer) => (layer === 'core' || this.#layers.includes(layer)) && manifest.layers.has(layer),
+    )
+    return new View(manifest, layers, (path) => {
+      const rows = this.#cache.get(path)
+      if (rows) {
+        this.#cache.delete(path)
+        this.#cache.set(path, rows)
+      }
+      return rows
+    })
+  }
+
+  async #run<T>(signal: AbortSignal | undefined, compute: (view: View) => T | undefined): Promise<T> {
+    signal?.throwIfAborted()
+    const counts = traces.get(this) as Trace
+    this.#runs++
+    try {
+      for (let retry = true; ; retry = false) {
+        const state = await race(this.#open(), signal)
+        try {
+          for (;;) {
+            const view = this.#view(state.manifest)
+            const value = compute(view)
+            if (view.wanted.size === 0) return value as T
+            if (view.labels) counts.labels++
+            else counts.rounds++
+            await race(this.#load([...view.wanted]), signal)
+          }
+        } catch (error) {
+          if (!retry || !(error instanceof Missing)) throw error
+          const text = await race(this.#source.manifest(AbortSignal.timeout(TIMEOUT)), signal)
+          if (text === state.text) throw error
+          this.#state = Promise.resolve({ text, manifest: readManifest(text) })
+        }
+      }
+    } finally {
+      this.#runs--
+      if (this.#runs === 0) for (const path of [...this.#cache.keys()].slice(0, -KEEP)) this.#cache.delete(path)
+    }
+  }
+
+  #load(paths: string[]): Promise<unknown> {
+    return Promise.all(
+      paths.map((path) => {
+        if (this.#cache.has(path)) return undefined
+        let loading = this.#loading.get(path)
+        if (!loading) {
+          loading = this.#fetch(path).finally(() => this.#loading.delete(path))
+          this.#loading.set(path, loading)
+        }
+        return loading
+      }),
+    )
+  }
+
+  async #fetch(path: string): Promise<void> {
+    while (this.#active >= PARALLEL) await new Promise<void>((go) => this.#queue.push(go))
+    this.#active++
+    try {
+      const bytes = await this.#source.file(path, AbortSignal.timeout(TIMEOUT))
+      this.#cache.set(path, decode(path, bytes))
+      const counts = traces.get(this) as Trace
+      counts.files++
+      counts.bytes += bytes.byteLength
+    } finally {
+      this.#active--
+      this.#queue.shift()?.()
+    }
+  }
+}

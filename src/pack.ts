@@ -2,10 +2,31 @@ import { createHash } from 'node:crypto'
 import { mkdir, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { LAYERS } from './model.ts'
+import { LAYERS, type Layer } from './model.ts'
 import { pick } from './sources/index.ts'
 
 const LEVEL = 6
+
+export const TERMS =
+  'Each layer is its own file and keeps the terms of the sources it was built from; combine them on your own machine.'
+
+export async function licenses(): Promise<[Layer, string[]][]> {
+  const sources = await pick([])
+  return LAYERS.map((layer) => [
+    layer,
+    sources.filter((source) => source.layer === layer).map((source) => `${source.name}: ${source.license}`),
+  ])
+}
+
+export async function notice(): Promise<string> {
+  return [
+    '# aninames data',
+    '',
+    TERMS,
+    '',
+    ...(await licenses()).flatMap(([layer, lines]) => [`## ${layer}`, '', ...lines.map((line) => `- ${line}`), '']),
+  ].join('\n')
+}
 
 export async function pack(dir: string): Promise<void> {
   const target = join(dir, 'release')
@@ -43,21 +64,6 @@ export async function pack(dir: string): Promise<void> {
     join(target, 'ttheme.json'),
     `${JSON.stringify({ built: new Date().toISOString(), layers }, null, 2)}\n`,
   )
-  const sources = await pick([])
-  await Bun.write(
-    join(target, 'NOTICE.md'),
-    [
-      '# aninames data',
-      '',
-      'Each layer is its own file and keeps the terms of the sources it was built from; combine them on your own machine.',
-      '',
-      ...LAYERS.flatMap((layer) => [
-        `## ${layer}`,
-        '',
-        ...sources.filter((source) => source.layer === layer).map((source) => `- ${source.name}: ${source.license}`),
-        '',
-      ]),
-    ].join('\n'),
-  )
+  await Bun.write(join(target, 'NOTICE.md'), await notice())
   console.log(`pack: ${(before / 1e6).toFixed(0)} MB → ${(after / 1e6).toFixed(0)} MB in ${target}`)
 }

@@ -4,6 +4,8 @@ export type Layer = 'core' | 'kowiki' | 'unlicensed'
 
 export const LAYERS: readonly Layer[] = ['core', 'kowiki', 'unlicensed']
 
+export const USER_AGENT = 'aninames/0.1 (+https://github.com/kecan0406/aninames)'
+
 export type NameKind = 'main' | 'official' | 'synonym' | 'short' | 'reading' | 'redirect' | 'section' | 'generated'
 
 export type Namespace =

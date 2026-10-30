@@ -20,6 +20,18 @@ run = "bun src/cli.ts build"
 description = "zstd-compress the built files into dist/release for publishing"
 run = "bun src/cli.ts pack"
 
+[tasks.chunk]
+description = "cut the built layers' search keys into the static site in dist/site: mise run chunk [bytes per file]"
+run = "bun src/cli.ts chunk"
+
+[tasks.compare]
+description = "search the probe sample with SQLite and with the client over dist/site, and compare: mise run compare [per band]"
+run = "bun src/cli.ts compare"
+
+[tasks.lib]
+description = "compile the client library into lib/ for the npm package"
+run = "rm -rf lib && tsc -p tsconfig.lib.json"
+
 [tasks.ttheme]
 description = "copy the ttheme slices into ttheme's cache, where it reads them"
 run = '''
@@ -51,8 +63,8 @@ description = "unit tests"
 run = "bun test"
 
 [tasks.check]
-description = "typecheck"
-run = "tsc --noEmit"
+description = "typecheck, and the client library alone against Node's types"
+run = ["tsc --noEmit", "tsc -p tsconfig.lib.json --noEmit"]
 
 [tasks.lint]
 description = "biome lint + format check + import order"

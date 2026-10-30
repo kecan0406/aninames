@@ -1,5 +1,6 @@
 node_modules/
 dist/
+lib/
 .cache/
 .DS_Store
 mise.local.toml

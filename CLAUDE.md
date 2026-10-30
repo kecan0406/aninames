@@ -11,9 +11,12 @@ All dev commands are mise tasks; package.json has no scripts. The toolchain is b
 - `mise run build` — merge the staged sources into one SQLite file per layer in `dist/`
 - `mise run search <query>` / `mise run eval` — query the built layers / run the golden queries in `tests/golden.ts` and the ttheme cast in `tests/ttheme.tsv` (`ANINAMES_LAYERS=core` limits the layers, `ANINAMES_MISSES=1` lists misses)
 - `mise run pack` — zstd-compress the built files into `dist/release`
+- `mise run chunk [bytes]` — cut each layer's search keys and entity rows into sorted gzip'd JSON files of about 32 KB in `dist/site` (the static index served at `names.ttheme.dev`): `<layer>/<table>/<hash>.json.gz`, `manifest.json`, `CNAME`, `NOTICE.md`, `index.html`
+- `mise run compare [per band]` — search the probe sample with SQLite and with the client (`src/client/`) over `dist/site`; prints first % per form and rounds, files and KB per cold query, and fails when the files find fewer entities first than SQLite
+- `mise run lib` — compile the client into `lib/` (JavaScript and `.d.ts`) for the npm package
 - `mise run probe [size]` — search a frozen sample (`tests/probe.json`, made on first run; delete it to draw a new one) of works and characters in three popularity bands by forms of their own names (Japanese, kana, romaji, swapped, short vowels, one-letter typo, Korean, Korean initials, Korean typed on an English keyboard) and Korean Wikipedia spellings with the `kowiki` layer held out; reports first %, MRR and query counts, names several entities share apart
 - `mise run silver` — hide the external ids that join characters across sources, run the merge, and report pairwise recall and precision against them
-- `mise run ci` — lint + typecheck + tests
+- `mise run ci` — lint + typecheck (the client also alone, against Node's types) + tests
 
 ## Pipeline
 
@@ -31,6 +34,8 @@ All dev commands are mise tasks; package.json has no scripts. The toolchain is b
 
 Every source belongs to one layer, and a built file never mixes layers: share-alike licenses cannot be merged into one database. The search library joins the layers on the user's machine.
 
+Derived scores (popularity, standing, flags) are the only cross-layer values a file carries, never names.
+
 - `core` — CC0 and ODbL: Wikidata, anime-offline-database (cedya77's continuation), VNDB. The built `core.sqlite` is ODbL.
 - `kowiki` — CC BY-SA 4.0: Korean Wikipedia article titles and redirects.
 - `unlicensed` — sources that state no license or whose data comes from sites that state none: AniDB titles, Bangumi, Anissia, Danbooru. Kept in its own file so a user can leave it out.
@@ -42,4 +47,5 @@ Every source belongs to one layer, and a built file never mixes layers: share-al
 - Single quotes, no semicolons, 2-space indent, 120 columns (biome). ES modules, `.ts` import extensions.
 - Network: every request sends `USER_AGENT` from `src/net.ts`; be polite (Danbooru about 1 request/s sustained, Zerochan 60/min, Wikidata SPARQL one query at a time, AniDB never directly — use the Anime-Lists mirror). Downloads go through `download` (writes `.part`, then renames).
 - Errors thrown for the user start with `aninames:`.
+- The client (`src/client/`, the npm package) runs unchanged on Node 22 and Bun: no `bun:*` and no Bun globals, and it imports only `es-hangul` and the pure `src/text.ts`, `src/model.ts` and `src/match.ts`. What it reads from the files is `unknown` until checked.
 - No backwards-compat shims or legacy fallbacks.

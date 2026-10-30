@@ -1,8 +1,7 @@
 import { rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Entry, Kind, Name, Namespace, Ref, Source } from '../model.ts'
-import { ref } from '../model.ts'
-import { USER_AGENT } from '../net.ts'
+import { ref, USER_AGENT } from '../model.ts'
 
 interface Endpoint {
   name: string

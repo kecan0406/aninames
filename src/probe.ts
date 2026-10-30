@@ -20,7 +20,7 @@ interface Band {
   high: number
 }
 
-const BANDS: Band[] = [
+export const BANDS: Band[] = [
   { name: 'popular', low: 0.95, high: 1.01 },
   { name: 'middle', low: 0.7, high: 0.95 },
   { name: 'long tail', low: 0, high: 0.7 },
@@ -75,7 +75,7 @@ function deleteMiddle(text: string): string | undefined {
   return /[a-z]/i.test(letters[at] ?? '') ? [...letters.slice(0, at), ...letters.slice(at + 1)].join('') : undefined
 }
 
-function forms(card: Card): [string, string][] {
+export function forms(card: Card): [string, string][] {
   const out: [string, string][] = []
   const add = (form: string, query: string | undefined) => {
     if (query?.trim()) out.push([form, query.trim()])
@@ -167,9 +167,9 @@ function heldOut(dir: string, layers: Layer[], size: number): void {
   index.close()
 }
 
-const FROZEN = join(import.meta.dirname, '..', 'tests', 'probe.json')
+export const FROZEN = join(import.meta.dirname, '..', 'tests', 'probe.json')
 
-type Frozen = Record<Kind, Record<string, string[]>>
+export type Frozen = Record<Kind, Record<string, string[]>>
 
 async function frozen(dir: string, index: Index, size: number): Promise<Frozen> {
   const file = Bun.file(FROZEN)
