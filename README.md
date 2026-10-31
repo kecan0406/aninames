@@ -24,7 +24,7 @@ v0, built and searched locally.
 
 Golden queries (`tests/golden.ts`) and the 139 character tags of ttheme's palettes (`tests/ttheme.tsv`), `mise run eval`:
 
-| Layers | Titles | Characters | Typos (not counted) | ttheme tags resolved |
+| Layers | Titles | Characters | Typos (not counted) | ttheme tags resolved (not counted) |
 |---|---|---|---|---|
 | unlicensed, core, kowiki | 15/15 | 14/14 | 9/9 | 136/139 |
 | unlicensed, kowiki | 15/15 | 14/14 | 9/9 | 136/139 |

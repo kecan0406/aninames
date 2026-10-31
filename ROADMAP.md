@@ -68,7 +68,7 @@ Popularity is Bangumi's alone since the spine, so namesakes reorder: `sakura` pu
 
 ### 10. A cast and home check in eval
 
-`mise run eval` checks pairs that must be one character and reports the homes of ttheme's commons (`tests/homes.tsv`, not counted). Left: a fixed set of works with their expected leads, and counting homes once the misses in 6 are settled. `tests/probe.json` was redrawn for the Bangumi ids, so probe figures before 2026-11-01 are on another sample.
+`mise run eval` checks pairs that must be one character and reports, without counting them, which of ttheme's tags resolve (`tests/ttheme.tsv`, 136 of 139 since the spine) and the homes of ttheme's commons (`tests/homes.tsv`). Left: a fixed set of works with their expected leads, and counting homes once the misses in 6 are settled. `tests/probe.json` was redrawn for the Bangumi ids, so probe figures before 2026-11-01 are on another sample.
 
 - Effort: small.
 

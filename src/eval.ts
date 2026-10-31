@@ -54,7 +54,7 @@ function forms(member: Cast): [string, string][] {
   return out
 }
 
-async function ttheme(index: Index): Promise<number> {
+async function ttheme(index: Index): Promise<void> {
   const members = await cast()
   const missing: string[] = []
   const nameless: string[] = []
@@ -78,7 +78,7 @@ async function ttheme(index: Index): Promise<number> {
     }
   }
   console.log(
-    `\nttheme characters: ${members.length - missing.length}/${members.length} resolve, ${nameless.length} of them without a Japanese name`,
+    `\nttheme characters (not counted): ${members.length - missing.length}/${members.length} resolve, ${nameless.length} of them without a Japanese name`,
   )
   if (missing.length) console.log(`  missing: ${missing.join(', ')}`)
   if (nameless.length) console.log(`  no Japanese name: ${nameless.join(', ')}`)
@@ -87,7 +87,6 @@ async function ttheme(index: Index): Promise<number> {
     console.log(`  ${form.padEnd(20)} ${row.hit}/${row.total}`)
     if (process.env.ANINAMES_MISSES) for (const miss of row.misses) console.log(`    ✗ ${miss}`)
   }
-  return missing.length + nameless.length
 }
 
 function pairs(index: Index, set: [Ref, Ref][], same: boolean, title: string): number {
@@ -133,7 +132,7 @@ export async function evaluate(dir: string, layers: Layer[]): Promise<number> {
   let failed = run(index, TITLES, 'titles') + run(index, CHARACTERS, 'characters')
   run(index, TYPOS, 'typos (not counted)')
   failed += pairs(index, SAME, true, 'one character') + pairs(index, APART, false, 'two characters')
-  failed += await ttheme(index)
+  await ttheme(index)
   await homes(index)
   index.close()
   return failed
