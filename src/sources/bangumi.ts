@@ -1,6 +1,6 @@
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { type Entry, type Name, type NameKind, type Ref, ref, type Source } from '../model.ts'
+import { type Entry, type Name, type NameKind, type Ref, type Role, ref, type Source } from '../model.ts'
 import { download, json } from '../net.ts'
 import { hasHangul, hasKanji, isKana } from '../text.ts'
 
@@ -17,6 +17,8 @@ const FILES = [SUBJECTS, CHARACTERS, CASTS]
 const ANIME: Record<number, string> = { 1: 'TV', 2: 'OVA', 3: 'MOVIE', 4: 'SPECIAL', 5: 'ONA', 2006: 'ONA' }
 
 const CHINESE = ['中国', '香港', '台湾']
+
+const CAST_ROLES: Record<number, Role> = { 1: 'lead', 2: 'support' }
 
 type Region = 'zh' | 'ja' | undefined
 
@@ -272,6 +274,11 @@ function characterOf(
   const regions = new Set(casts.map((cast) => works.get(cast.subject_id)?.region))
   const chinese = regions.has('zh') && !regions.has('ja')
   const best = Math.max(0, ...casts.map((cast) => works.get(cast.subject_id)?.rank ?? 0))
+  const roles = new Map<Ref, Role>()
+  for (const cast of ordered) {
+    const work = ref('bangumi', cast.subject_id)
+    if (!roles.has(work)) roles.set(work, CAST_ROLES[cast.type] ?? 'minor')
+  }
   const entry: Entry = {
     id: ref('bangumi', character.id),
     kind: 'character',
@@ -280,7 +287,8 @@ function characterOf(
       ...infoboxNames(found, SEPARATORS),
       ...own(character.name),
     ]),
-    works: [...new Set(ordered.map((cast) => ref('bangumi', cast.subject_id)))],
+    works: [...roles.keys()],
+    roles: [...roles],
     rank: character.collects + best / (top + 1),
   }
   const refs = refsOf(found, '引用来源', /vndb\.org\/(c\d+)/)

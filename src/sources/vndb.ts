@@ -2,7 +2,17 @@ import { createReadStream } from 'node:fs'
 import { mkdir, readdir, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { createZstdDecompress } from 'node:zlib'
-import { type Entry, type Name, type NameKind, type Ref, ref, type Source, USER_AGENT } from '../model.ts'
+import {
+  type Entry,
+  type Name,
+  type NameKind,
+  type Ref,
+  ROLES,
+  type Role,
+  ref,
+  type Source,
+  USER_AGENT,
+} from '../model.ts'
 import { download } from '../net.ts'
 import { hasHangul, hasKanji } from '../text.ts'
 
@@ -34,6 +44,8 @@ const FILES = [
 const BLOCK = 512
 
 const ROLE_WEIGHT: Record<string, number> = { primary: 1, main: 0.6, side: 0.2, appears: 0.05 }
+
+const CAST_ROLES: Record<string, Role> = { primary: 'lead', main: 'lead', side: 'support' }
 
 const ESCAPES: Record<string, string> = { b: '\b', f: '\f', n: '\n', r: '\r', t: '\t', v: '\v' }
 
@@ -358,6 +370,7 @@ async function* characters(raw: string, works: ReadonlyMap<number, Work>): Async
   const roles = await group(raw, 'chars_vns', ['id', 'vid', 'role'], ([, vid, role]) => ({
     vid: num(vid ?? ''),
     weight: ROLE_WEIGHT[role ?? ''] ?? 0.3,
+    role: CAST_ROLES[role ?? ''] ?? 'minor',
   }))
   const instances = await group(raw, 'chars', ['id', 'main', 'main_spoil'], ([, main, spoil]) =>
     main && /^c?\d+$/.test(main) && spoil === '0' ? num(main) : undefined,
@@ -379,7 +392,13 @@ async function* characters(raw: string, works: ReadonlyMap<number, Work>): Async
       kind: 'character',
       names: characterNames(lang, own, aliases.get(id) ?? []),
     }
-    if (vids.length > 0) entry.works = vids.map((vid) => ref('vndb', `v${vid}`))
+    if (vids.length > 0) {
+      entry.works = vids.map((vid) => ref('vndb', `v${vid}`))
+      entry.roles = vids.map((vid) => {
+        const best = Math.min(...cast.filter((each) => each.vid === vid).map((each) => ROLES.indexOf(each.role)))
+        return [ref('vndb', `v${vid}`), ROLES[best] ?? 'minor']
+      })
+    }
     const main = instances.get(id)?.[0]
     if (main !== undefined) entry.refs = [ref('vndb', `c${main}`)]
     entry.rank = Math.max(0, ...cast.map((each) => (works.get(each.vid)?.votes ?? 0) * each.weight))

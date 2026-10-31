@@ -27,6 +27,8 @@ export interface Found {
   refs: string[]
   home: string | null
   origin: string[]
+  year: number | null
+  medium: string | null
   score: number
   adult: boolean
 }
@@ -125,6 +127,8 @@ function card(rows: EntityRow[], score: number, adult: boolean): Found {
     refs,
     home,
     origin,
+    year: rows.find((row) => row.year !== null)?.year ?? null,
+    medium: rows.find((row) => row.medium !== null)?.medium ?? null,
     score,
     adult,
   }
@@ -204,18 +208,28 @@ export class Names {
     return this.#run(signal, (view) => {
       if (!key) return []
       const covered = view.layers.includes('unlicensed')
-      const best = new Map<number, { posts: number; mask: number; flags: number; standing: number }>()
-      for (const [, eid, posts, flags, , standing] of view.tagged(key, prefix, table)) {
+      const best = new Map<number, { posts: number; mask: number; flags: number; standing: number; tier: number }>()
+      for (const [, eid, posts, flags, , standing, , tier = 0] of view.tagged(key, prefix, table)) {
         if (kind && (flags & CHARACTER ? 'character' : 'work') !== kind) continue
         if (!adult && flags & ADULT) continue
         if (covered && flags & SHADOWED) continue
         const known = best.get(eid)
         const mask = flags & ~(CHARACTER | MAIN | ADULT | SHADOWED)
-        if (!known || posts > known.posts) best.set(eid, { posts, mask: mask | (known?.mask ?? 0), flags, standing })
-        else known.mask |= mask
+        if (!known || posts > known.posts) {
+          best.set(eid, {
+            posts,
+            mask: mask | (known?.mask ?? 0),
+            flags,
+            standing,
+            tier: Math.min(tier, known?.tier ?? tier),
+          })
+        } else {
+          known.mask |= mask
+          known.tier = Math.min(known.tier, tier)
+        }
       }
       const order = [...best]
-        .sort(([a, x], [b, y]) => y.posts - x.posts || y.standing - x.standing || a - b)
+        .sort(([a, x], [b, y]) => x.tier - y.tier || y.posts - x.posts || y.standing - x.standing || a - b)
         .slice(0, limit)
       view.labels = true
       const out = order.flatMap(([eid, hit]) => {

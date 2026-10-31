@@ -194,6 +194,7 @@ export type KeyRow = readonly [
   rank: number,
   standing: number,
   extra: number,
+  tier?: number,
 ]
 
 export interface Name {
@@ -220,16 +221,20 @@ export interface EntityRow {
   refs: string[]
   home: string | null
   origin: string[]
+  year: number | null
+  medium: string | null
 }
 
 const isInt = (value: unknown): value is number => Number.isSafeInteger(value)
 
 function keyRow(value: unknown): KeyRow | undefined {
   if (!Array.isArray(value) || value.length < 7) return undefined
-  const [key, eid, weight, flags, rank, standing, extra] = value
+  const [key, eid, weight, flags, rank, standing, extra, tier] = value
   if (typeof key !== 'string' || !isCount(eid)) return undefined
   if (!isInt(weight) || !isInt(flags) || !isInt(rank) || !isInt(standing) || !isInt(extra)) return undefined
-  return [key, eid, weight, flags, rank, standing, extra]
+  return isCount(tier)
+    ? [key, eid, weight, flags, rank, standing, extra, tier]
+    : [key, eid, weight, flags, rank, standing, extra]
 }
 
 function nameOf(value: unknown): Name | undefined {
@@ -285,6 +290,8 @@ function entityRow(value: unknown): EntityRow | undefined {
     rawRefs = [],
     home = null,
     rawOrigin = [],
+    year = null,
+    medium = null,
   ] = value
   if (!isCount(eid) || typeof id !== 'string') return undefined
   const kind: Kind | undefined = id.startsWith('w/') ? 'work' : id.startsWith('c/') ? 'character' : undefined
@@ -297,7 +304,25 @@ function entityRow(value: unknown): EntityRow | undefined {
   const origin = list(rawOrigin, countryOf)
   if (!names || !danbooru || !works || !reach || !refs || !origin) return undefined
   if (home !== null && typeof home !== 'string') return undefined
-  return { eid, id, kind, names, danbooru, works, reach, rank, standing, extra, adult: adult === 1, refs, home, origin }
+  if ((year !== null && !isCount(year)) || (medium !== null && typeof medium !== 'string')) return undefined
+  return {
+    eid,
+    id,
+    kind,
+    names,
+    danbooru,
+    works,
+    reach,
+    rank,
+    standing,
+    extra,
+    adult: adult === 1,
+    refs,
+    home,
+    origin,
+    year,
+    medium,
+  }
 }
 
 export function readRows(table: Table, value: unknown): KeyRow[] | EntityRow[] | undefined {

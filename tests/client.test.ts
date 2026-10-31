@@ -78,7 +78,7 @@ test('range lookups find equal keys that straddle chunk files', async () => {
   }
 })
 
-test('tagged finds the entities of a Danbooru tag whatever its punctuation and qualifier, with their refs and origin', async () => {
+test('tagged finds the entities of a Danbooru tag whatever its punctuation and qualifier, with their refs and facts', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
   try {
     const tag = new Writer(join(dir, 'core', 'tag'), 4096)
@@ -100,6 +100,9 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
         0,
         0,
         [],
+        null,
+        [],
+        2021,
       ],
       [1, 'c/x:1', [['Pip', 'en', 0, 0]], [['pip_(starfall_harbor)', 30]], [[2, 'w/x:2']], [], 0, 0, 0, 0, []],
       [
@@ -119,6 +122,8 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
         ['anilist:9', 'tmdb:tv/7'],
         null,
         ['JP'],
+        2019,
+        'anime',
       ],
     ] as const
     for (const row of rows) entity.add([...row], row[1], row[0])
@@ -131,7 +136,10 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
     const works = await names.tagged('Starfall-Harbor', { kind: 'work' })
     expect(works.map((found) => found.id)).toEqual(['w/x:2', 'w/x:0'])
     expect(works[0]?.refs).toEqual(['anilist:9', 'tmdb:tv/7'])
-    expect(works.map((found) => found.origin)).toEqual([['JP'], []])
+    expect(works.map((found) => [found.origin, found.year, found.medium])).toEqual([
+      [['JP'], 2019, 'anime'],
+      [[], 2021, null],
+    ])
     expect(works[0]?.names).toEqual([{ text: 'Starfall Harbor', lang: 'en', kind: 'official' }])
     expect((await names.tagged('pip_(anything)')).map((found) => found.id)).toEqual(['c/x:1'])
     expect(await names.tagged('pip', { kind: 'work' })).toEqual([])
@@ -142,7 +150,7 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
   }
 })
 
-test('cast lists the characters at home in a tag, and a home a higher layer names shadows the one below', async () => {
+test('cast lists the characters at home in a tag by role before posts, and a home a higher layer names shadows the one below', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
   try {
     const both = present('core') | present('unlicensed')
@@ -160,8 +168,8 @@ test('cast lists the characters at home in a tag, and a home a higher layer name
     const core = write(
       'core',
       [
-        ['starfallharbor', 1, 0, CHARACTER | both, 0, 4, 0],
-        ['starfallharbor', 3, 0, CHARACTER | SHADOWED | both, 0, 7, 0],
+        ['starfallharbor', 1, 0, CHARACTER | both, 0, 4, 0, 2],
+        ['starfallharbor', 3, 0, CHARACTER | SHADOWED | both, 0, 7, 0, 2],
       ],
       [
         [1, 'c/x:1', [['Pip', 'en', 0, 0]], [], [], [], 0, 4, 0, 0, [], 'starfall_harbor'],
@@ -171,12 +179,14 @@ test('cast lists the characters at home in a tag, and a home a higher layer name
     const unlicensed = write(
       'unlicensed',
       [
-        ['starfallharbor', 1, 50, CHARACTER | both, 0, 4, 0],
-        ['tidepoolacademy', 3, 80, CHARACTER | both, 0, 7, 0],
+        ['starfallharbor', 1, 50, CHARACTER | both, 0, 4, 0, 1],
+        ['starfallharbor', 5, 900, CHARACTER | present('unlicensed'), 0, 9, 0, 3],
+        ['tidepoolacademy', 3, 80, CHARACTER | both, 0, 7, 0, 1],
       ],
       [
         [1, 'c/x:1', [], [['pip_(starfall_harbor)', 50]], [], [], 0, 4, 0, 0, [], 'starfall_harbor'],
         [3, 'c/x:3', [], [['wren_(tidepool_academy)', 80]], [], [], 0, 7, 0, 0, [], 'tidepool_academy'],
+        [5, 'c/x:5', [], [['doodle_pip_(starfall_harbor)', 900]], [], [], 0, 9, 0, 0, [], 'starfall_harbor'],
       ],
     )
     writeFileSync(
@@ -184,7 +194,7 @@ test('cast lists the characters at home in a tag, and a home a higher layer name
       JSON.stringify({ aninames: FORMAT, built: '', layers: { core, unlicensed } }),
     )
     const names = new Names(fileSource(dir))
-    expect((await names.cast('Starfall Harbor')).map((found) => found.id)).toEqual(['c/x:1'])
+    expect((await names.cast('Starfall Harbor')).map((found) => found.id)).toEqual(['c/x:1', 'c/x:5'])
     expect((await names.cast('tidepool_academy')).map((found) => [found.id, found.home])).toEqual([
       ['c/x:3', 'tidepool_academy'],
     ])

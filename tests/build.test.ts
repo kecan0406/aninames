@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
-import { familyOf, groupsOf, homeOf, learnedOf, votedOf } from '../src/build.ts'
+import { adultCharactersOf, familyOf, groupsOf, homeOf, learnedOf, tierOf, votedOf } from '../src/build.ts'
+import type { Entry, Ref } from '../src/model.ts'
 
 test('a copyright tag takes every same-title work the evidence ties together, and refuses an even split', () => {
   const ties = new Set(['tv|film', 'film|manga', 'game|tv'])
@@ -89,4 +90,50 @@ test("a character's works choose the tag most of them carry, a tie going to the 
     ),
   ).toBe('academy_saga')
   expect(votedOf(new Map(), posts)).toBeUndefined()
+})
+
+test("a character's place in its home's cast is its best role in a work of that home, then whether a catalog knows it", () => {
+  const home = new Set(['harbor_tv', 'harbor_film'])
+  const reaches = (work: string) => home.has(work)
+  expect(
+    tierOf(
+      new Map([
+        ['harbor_tv', 1],
+        ['harbor_film', 0],
+      ]),
+      reaches,
+      true,
+    ),
+  ).toBe(0)
+  expect(
+    tierOf(
+      new Map([
+        ['harbor_tv', 1],
+        ['crossover_quest', 0],
+      ]),
+      reaches,
+      true,
+    ),
+  ).toBe(1)
+  expect(tierOf(new Map([['harbor_tv', 2]]), reaches, true)).toBe(2)
+  expect(tierOf(new Map(), reaches, true)).toBe(2)
+  expect(tierOf(new Map(), reaches, false)).toBe(3)
+})
+
+test('a character is adult only when every work it is in, in any layer, is adult', () => {
+  const character = (id: string, layers: Ref[][]) => ({
+    id,
+    kind: 'character' as const,
+    members: layers.map((works): { entry: Entry } => ({ entry: { id: 'vndb:c1', names: [], works } })),
+  })
+  const found = adultCharactersOf(
+    [
+      character('c/parody', [['vndb:v1']]),
+      character('c/guest', [['vndb:v1'], ['bangumi:7']]),
+      character('c/unplaced', [[]]),
+    ],
+    (work) => `w/${work}`,
+    new Set(['w/vndb:v1']),
+  )
+  expect([...found]).toEqual(['c/parody'])
 })

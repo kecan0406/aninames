@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { foldHan } from './han.ts'
 import {
   type Entry,
   type Kind,
@@ -9,6 +10,7 @@ import {
   type Name,
   type NameKind,
   type Namespace,
+  ROLES,
   type Source,
 } from './model.ts'
 import { load, NAMES } from './sources/index.ts'
@@ -177,7 +179,7 @@ interface Entity {
 function mergeKey(text: string, kind: Kind, medium: string): string | undefined {
   const base = qualifiers(text).base
   if (japanese(base)) {
-    const key = flat(base)
+    const key = foldHan(flat(base))
     return [...key].length >= (kind === 'work' ? 4 : 3) ? `${medium}|${key}` : undefined
   }
   if (kind !== 'character' || !/^[\p{Script=Latin}\s.'’-]+$/u.test(base.normalize('NFKD').replace(/\p{M}/gu, '')))
@@ -286,7 +288,7 @@ interface CharacterKey {
 function characterKey(text: string): CharacterKey | undefined {
   const base = qualifiers(text).base
   if (japanese(base)) {
-    const key = flat(base)
+    const key = foldHan(flat(base))
     const length = [...key].length
     return length >= 2 ? { key: `ja|${key}`, loose: length < 3 } : undefined
   }
@@ -709,6 +711,7 @@ function attachEntries(
 interface Home {
   tag: string
   posts: number | null
+  tier: number
 }
 
 const TAG = 'danbooru:'
@@ -751,6 +754,13 @@ export function homeOf(
 
 export function votedOf(votes: ReadonlyMap<string, number>, posts: (tag: string) => number): string | undefined {
   return [...votes].sort((a, b) => b[1] - a[1] || posts(b[0]) - posts(a[0]) || (a[0] < b[0] ? -1 : 1))[0]?.[0]
+}
+
+export function tierOf(roles: ReadonlyMap<string, number>, reaches: (work: string) => boolean, known: boolean): number {
+  let best = ROLES.length
+  for (const [work, role] of roles) if (role < best && reaches(work)) best = role
+  if (best < 2) return best
+  return known ? 2 : 3
 }
 
 export function learnedOf(votes: ReadonlyMap<string, ReadonlyMap<string, number>>): Map<string, string> {
@@ -802,8 +812,15 @@ function homesOf(
     for (const other of links.get(root) ?? []) for (const tag of workTags.get(other)?.keys() ?? []) out.add(tag)
     return out
   }
-  const chosen: { id: string; quals: string[]; voted: Set<string>; found: string | undefined; posts: number | null }[] =
-    []
+  const chosen: {
+    id: string
+    quals: string[]
+    voted: Set<string>
+    found: string | undefined
+    posts: number | null
+    roles: Map<string, number>
+    known: boolean
+  }[] = []
   const learning = new Map<string, Map<string, number>>()
   for (const [root, entity] of entities) {
     if (entity.kind !== 'character') continue
@@ -815,8 +832,11 @@ function homesOf(
     })
     const series = new Set<string>()
     const works = new Set<string>()
+    const roles = new Map<string, number>()
+    let known = false
     for (const m of entity.members) {
       if (!seen(m)) continue
+      known ||= m.source !== 'danbooru'
       for (const ref of m.entry.series ?? []) {
         const there = workRoot(ref)
         if (there) series.add(there)
@@ -824,6 +844,10 @@ function homesOf(
       for (const ref of m.entry.works ?? []) {
         const there = workRoot(ref)
         if (there) works.add(there)
+      }
+      for (const [ref, role] of m.entry.roles ?? []) {
+        const there = workRoot(ref)
+        if (there) roles.set(there, Math.min(roles.get(there) ?? ROLES.length, ROLES.indexOf(role)))
       }
     }
     const tally = new Map<string, number>()
@@ -834,7 +858,7 @@ function homesOf(
     const found = votedOf(tally, postsOf) ?? franchise
     if (quals.length === 0 && !found) continue
     const best = own.find(([, count]) => count !== null)?.[1] ?? null
-    chosen.push({ id: entity.id, quals, voted: new Set(tally.keys()), found, posts: best })
+    chosen.push({ id: entity.id, quals, voted: new Set(tally.keys()), found, posts: best, roles, known })
     const qual = quals[0]
     if (qual && found) {
       const tags = learning.get(qual) ?? new Map<string, number>()
@@ -844,9 +868,10 @@ function homesOf(
   }
   const learned = learnedOf(learning)
   const homes = new Map<string, Home>()
-  for (const { id, quals, voted, found, posts: count } of chosen) {
+  for (const { id, quals, voted, found, posts: count, roles, known } of chosen) {
     const tag = homeOf(quals, direct, found, learned, (each) => voted.size === 0 || voted.has(each))
-    if (tag) homes.set(id, { tag, posts: count })
+    if (tag)
+      homes.set(id, { tag, posts: count, tier: tierOf(roles, (work) => workTags.get(work)?.has(tag) ?? false, known) })
   }
   return homes
 }
@@ -959,7 +984,9 @@ function schema(db: Database): void {
   db.run('CREATE TABLE related (work TEXT NOT NULL, other TEXT NOT NULL)')
   db.run('CREATE TABLE ranks (entity TEXT PRIMARY KEY, rank REAL NOT NULL, weight INTEGER NOT NULL)')
   db.run('CREATE TABLE adults (entity TEXT PRIMARY KEY)')
-  db.run('CREATE TABLE homes (entity TEXT PRIMARY KEY, tag TEXT NOT NULL, posts INTEGER, shadowed INTEGER NOT NULL)')
+  db.run(
+    'CREATE TABLE homes (entity TEXT PRIMARY KEY, tag TEXT NOT NULL, posts INTEGER, shadowed INTEGER NOT NULL, tier INTEGER NOT NULL)',
+  )
 }
 
 function indexes(db: Database): void {
@@ -982,6 +1009,20 @@ function indexes(db: Database): void {
 function licenses(sources: Source[]): Record<Layer, string[]> {
   const out: Record<Layer, string[]> = { core: [], kowiki: [], unlicensed: [] }
   for (const source of sources) out[source.layer].push(`${source.name}: ${source.license}`)
+  return out
+}
+
+export function adultCharactersOf(
+  entities: Iterable<{ id: string; kind: Kind; members: readonly { entry: Entry }[] }>,
+  resolve: (work: string) => string | undefined,
+  adult: ReadonlySet<string>,
+): Set<string> {
+  const out = new Set<string>()
+  for (const entity of entities) {
+    if (entity.kind !== 'character') continue
+    const works = new Set(entity.members.flatMap((m) => (m.entry.works ?? []).flatMap((work) => resolve(work) ?? [])))
+    if (works.size > 0 && [...works].every((work) => adult.has(work))) out.add(entity.id)
+  }
   return out
 }
 
@@ -1015,6 +1056,11 @@ export async function build(): Promise<void> {
     if (entity.kind !== 'work') continue
     for (const m of entity.members) if (m.entry.adult) adultWorks[m.layer].add(entity.id)
   }
+  const adultCharacters = adultCharactersOf(
+    entities.values(),
+    (work) => resolve('work', work),
+    new Set(LAYERS.flatMap((layer) => [...adultWorks[layer]])),
+  )
   for (const layer of LAYERS) {
     const path = join(DIST, `${layer}.sqlite`)
     await rm(path, { force: true })
@@ -1034,7 +1080,7 @@ export async function build(): Promise<void> {
     const insertRelated = db.prepare('INSERT INTO related (work, other) VALUES (?, ?)')
     const insertRank = db.prepare('INSERT INTO ranks (entity, rank, weight) VALUES (?, ?, ?)')
     const insertAdult = db.prepare('INSERT INTO adults (entity) VALUES (?)')
-    const insertHome = db.prepare('INSERT INTO homes (entity, tag, posts, shadowed) VALUES (?, ?, ?, ?)')
+    const insertHome = db.prepare('INSERT INTO homes (entity, tag, posts, shadowed, tier) VALUES (?, ?, ?, ?, ?)')
     let nameCount = 0
     db.transaction(() => {
       for (const [root, entity] of entities) {
@@ -1084,7 +1130,7 @@ export async function build(): Promise<void> {
         const flagged =
           entity.kind === 'work'
             ? adultWorks[layer].has(entity.id)
-            : works.size > 0 && [...works].every((work) => adultWorks[layer].has(work))
+            : entity.layer === layer && adultCharacters.has(entity.id)
         if (flagged) insertAdult.run(entity.id)
         for (const other of related) {
           insertRelated.run(entity.id, other)
@@ -1113,7 +1159,7 @@ export async function build(): Promise<void> {
       }
       for (const [id, home] of homes[layer] ?? []) {
         const above = layer === 'core' ? homes.unlicensed?.get(id)?.tag : undefined
-        insertHome.run(id, home.tag, home.posts, above !== undefined && above !== home.tag ? 1 : 0)
+        insertHome.run(id, home.tag, home.posts, above !== undefined && above !== home.tag ? 1 : 0, home.tier)
       }
       const meta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)')
       meta.run('layer', layer)

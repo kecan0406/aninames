@@ -284,37 +284,49 @@ function keyTable(db: Database, layer: Layer, table: KeyTable, context: Context)
 const TAG_SQL: Record<'tag' | 'home', string> = {
   tag: `SELECT entity, substr(ref, 10) AS tag, max(rank) AS posts FROM refs
 WHERE ref GLOB 'danbooru:*' GROUP BY entity, ref`,
-  home: 'SELECT entity, tag, posts, shadowed FROM homes',
+  home: 'SELECT entity, tag, posts, shadowed, tier FROM homes',
 }
 
 function tagTable(db: Database, layer: Layer, table: 'tag' | 'home', context: Context): Writer {
   const { eid, masks, score } = context
   const writer = new Writer(join(context.out, layer, table), context.target)
-  const rows: [key: string, at: number, posts: number, character: boolean, shadowed: boolean][] = []
+  const rows: [key: string, at: number, posts: number, character: boolean, shadowed: boolean, tier?: number][] = []
   for (const row of db
-    .query<{ entity: string; tag: string; posts: number | null; shadowed?: number }, []>(TAG_SQL[table])
+    .query<{ entity: string; tag: string; posts: number | null; shadowed?: number; tier?: number }, []>(TAG_SQL[table])
     .iterate()) {
     const at = eid.get(row.entity)
     const key = flat(qualifiers(row.tag).base)
     if (at !== undefined && key) {
-      rows.push([key, at, Math.round(row.posts ?? 0), row.entity.startsWith('c/'), row.shadowed === 1])
+      rows.push([key, at, Math.round(row.posts ?? 0), row.entity.startsWith('c/'), row.shadowed === 1, row.tier])
     }
   }
   rows.sort((a, b) => compare(a[0], b[0]) || a[1] - b[1] || b[2] - a[2])
   let last: [string, number] | undefined
-  for (const [key, at, posts, character, shadowed] of rows) {
+  for (const [key, at, posts, character, shadowed, tier] of rows) {
     if (last && last[0] === key && last[1] === at) continue
     last = [key, at]
     const flags =
       (character ? CHARACTER : 0) | (score.adult[at] ? ADULT : 0) | (shadowed ? SHADOWED : 0) | (masks[at] ?? 0)
-    writer.add([key, at, posts, flags, score.rank[at], score.standing[at], score.extra[at]], key)
+    writer.add(
+      [
+        key,
+        at,
+        posts,
+        flags,
+        score.rank[at],
+        score.standing[at],
+        score.extra[at],
+        ...(tier === undefined ? [] : [tier]),
+      ],
+      key,
+    )
   }
   writer.flush()
   return writer
 }
 
 const ENTITY_SQL = `WITH ids(id) AS (${IDS})
-SELECT id,
+SELECT ids.id AS id,
   (SELECT json_group_array(json_array(text, lang, kind, source, qual)) FROM
     (SELECT text, lang, kind, source, qual FROM names WHERE entity = ids.id ORDER BY rowid)) AS names,
   (SELECT json_group_array(json_array(substr(ref, 10), rank)) FROM
@@ -324,10 +336,17 @@ SELECT id,
   (SELECT json_group_array(ref) FROM
     (SELECT ref FROM refs WHERE entity = ids.id AND ref NOT GLOB 'danbooru:*' GROUP BY ref ORDER BY ref)) AS refs,
   (SELECT tag FROM homes WHERE entity = ids.id) AS home,
-  (SELECT origin FROM entities WHERE id = ids.id) AS origin
-FROM ids ORDER BY id`
+  e.origin AS origin, e.year AS year, e.medium AS medium
+FROM ids LEFT JOIN entities e ON e.id = ids.id ORDER BY ids.id`
 
 type NameSource = [text: string, lang: string | null, kind: NameKind, source: string, qual: string | null]
+
+function trimmed(tail: unknown[]): unknown[] {
+  const out = [...tail]
+  const empty = (value: unknown) => value === null || (Array.isArray(value) && value.length === 0)
+  while (out.length > 0 && empty(out.at(-1))) out.pop()
+  return out
+}
 
 function entityTable(db: Database, layer: Layer, context: Context): Writer {
   const { eid, score } = context
@@ -344,6 +363,8 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
         refs: string
         home: string | null
         origin: string | null
+        year: number | null
+        medium: string | null
       },
       []
     >(ENTITY_SQL)
@@ -380,7 +401,7 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
         score.adult[at],
         JSON.parse(row.refs) as string[],
         row.home,
-        ...(row.origin ? [row.origin.split(' ')] : []),
+        ...trimmed([row.origin ? row.origin.split(' ') : [], row.year, row.medium]),
       ],
       row.id,
       at,

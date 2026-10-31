@@ -3,6 +3,7 @@ import { build, DIST } from './build.ts'
 import { compare } from './compare.ts'
 import { evaluate } from './eval.ts'
 import { chunk } from './files.ts'
+import { writeHan } from './han.ts'
 import { LAYERS, type Layer } from './model.ts'
 import { pack, unpack } from './pack.ts'
 import { probe } from './probe.ts'
@@ -54,6 +55,9 @@ async function main(argv: string[]): Promise<void> {
     case 'silver':
       await silver()
       return
+    case 'han':
+      console.log(`han: ${await writeHan()} Han variants fold into another character`)
+      return
     case 'probe':
       await probe(DIST, layersFrom(), Number(rest[0] ?? 300))
       return
@@ -78,7 +82,7 @@ async function main(argv: string[]): Promise<void> {
     }
     default:
       throw new Error(
-        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, slice, pack, chunk, search, eval, probe, compare or silver`,
+        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, slice, pack, chunk, search, eval, probe, compare, silver or han`,
       )
   }
 }

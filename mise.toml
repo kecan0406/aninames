@@ -58,6 +58,10 @@ run = "bun src/cli.ts probe"
 description = "measure character merging against the cross-source ids it is not shown"
 run = "bun src/cli.ts silver"
 
+[tasks.han]
+description = "rebuild src/han.txt, the Han variants every merge key folds into one character, from Unicode's Unihan and OpenCC's shinjitai table"
+run = "bun src/cli.ts han"
+
 [tasks.test]
 description = "unit tests"
 run = "bun test"

@@ -31,6 +31,10 @@ export type Namespace =
 
 export type Ref = `${Namespace}:${string}`
 
+export type Role = 'lead' | 'support' | 'minor'
+
+export const ROLES: readonly Role[] = ['lead', 'support', 'minor']
+
 export interface Name {
   text: string
   lang?: string
@@ -45,6 +49,7 @@ export interface Entry {
   refs?: Ref[]
   names: Name[]
   works?: Ref[]
+  roles?: [work: Ref, role: Role][]
   series?: Ref[]
   related?: Ref[]
   near?: Ref[]
