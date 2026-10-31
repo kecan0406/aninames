@@ -2,11 +2,11 @@ import type { Entry } from './model.ts'
 import { titleKey } from './text.ts'
 
 export function tiesOf(entry: Entry): string[] {
-  return [...(entry.within ?? []), ...(entry.basis ?? []), ...(entry.related ?? [])]
+  return [...(entry.within ?? []), ...(entry.related ?? [])]
 }
 
 export function upward(entry: Entry): string[] {
-  return [...(entry.within ?? []), ...(entry.basis ?? [])]
+  return entry.within ?? []
 }
 
 export function levelsOf(

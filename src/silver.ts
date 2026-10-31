@@ -1,5 +1,6 @@
 import type { Staged } from './build.ts'
-import { link, readAll } from './build.ts'
+import { readAll } from './build.ts'
+import { link } from './spine.ts'
 import { node, Union } from './union.ts'
 
 const SOURCES = new Set(['wikidata', 'vndb', 'bangumi', 'danbooru'])
@@ -12,7 +13,7 @@ interface Unit {
 }
 
 function units(staged: Staged[]): { truth: Union; local: Union; members: Staged[] } {
-  const truth = new Union()
+  const truth = new Union((key) => key.includes('|wikidata:'))
   const local = new Union()
   const members = staged.filter((s) => s.entry.kind === 'character' && !s.entry.attach && SOURCES.has(s.source))
   for (const s of members) {

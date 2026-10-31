@@ -6,12 +6,12 @@ export interface Golden {
   expect: Ref[]
 }
 
-const BOCCHI: Ref[] = ['mal:47917', 'mal:61006']
-const KAGUYA: Ref[] = ['mal:37999', 'mal:40591', 'mal:43608']
-const REZERO: Ref[] = ['mal:31240', 'mal:39587', 'mal:42203', 'mal:54857', 'mal:61316']
-const STEINSGATE: Ref[] = ['mal:9253', 'vndb:v2002']
-const FRIEREN: Ref[] = ['mal:52991', 'mal:59978']
-const MADOKA: Ref[] = ['mal:9756']
+const BOCCHI: Ref[] = ['bangumi:328609', 'mal:47917', 'mal:61006']
+const KAGUYA: Ref[] = ['bangumi:248175', 'mal:37999', 'mal:40591', 'mal:43608']
+const REZERO: Ref[] = ['bangumi:140001', 'mal:31240', 'mal:39587', 'mal:42203', 'mal:54857', 'mal:61316']
+const STEINSGATE: Ref[] = ['bangumi:10380', 'mal:9253', 'vndb:v2002']
+const FRIEREN: Ref[] = ['bangumi:400602', 'mal:52991', 'mal:59978']
+const MADOKA: Ref[] = ['bangumi:9717', 'mal:9756']
 
 export const TITLES: Golden[] = [
   { query: 'ぼっち・ざ・ろっく', kind: 'work', expect: BOCCHI },

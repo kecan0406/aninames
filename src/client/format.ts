@@ -1,4 +1,4 @@
-import { type Kind, LAYERS, type Layer, type NameKind } from '../model.ts'
+import { type Kind, LAYERS, type Layer, type NameKind, SPINE } from '../model.ts'
 import { flat } from '../text.ts'
 import { compare } from './order.ts'
 
@@ -28,7 +28,6 @@ export const TRUSTED: readonly string[] = ['wikidata', 'aod', 'anidb', 'vndb']
 export const CHARACTER = 1
 export const MAIN = 2
 export const ADULT = 4
-export const SHADOWED = 64
 
 export function present(layer: Layer): number {
   return 8 << LAYERS.indexOf(layer)
@@ -171,7 +170,7 @@ export function readManifest(text: string): Manifest {
     const home = tables.home === undefined ? undefined : spansOf(tables.home, `${layer}/home`)
     layers.set(layer, { keys, tag, home, entity: unpack(tables.entity, `${layer}/entity`, true) })
   }
-  if (!layers.has('core')) throw bad('it has no core layer')
+  if (!layers.has(SPINE)) throw bad(`it has no ${SPINE} layer`)
   return { built, layers }
 }
 

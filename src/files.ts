@@ -14,7 +14,6 @@ import {
   type Packed,
   pack,
   present,
-  SHADOWED,
   shared,
   TABLES,
   type Table,
@@ -22,7 +21,7 @@ import {
 } from './client/format.ts'
 import { compare } from './client/order.ts'
 import { weightOf } from './match.ts'
-import { LAYERS, type Layer, type NameKind } from './model.ts'
+import { LAYERS, type Layer, type NameKind, SPINE } from './model.ts'
 import { licenses, notice, TERMS } from './pack.ts'
 import { flat, qualifiers } from './text.ts'
 
@@ -279,29 +278,28 @@ function keyTable(db: Database, layer: Layer, table: KeyTable, context: Context)
 const TAG_SQL: Record<'tag' | 'home', string> = {
   tag: `SELECT entity, substr(ref, 10) AS tag, max(rank) AS posts FROM refs
 WHERE ref GLOB 'danbooru:*' GROUP BY entity, ref`,
-  home: 'SELECT entity, tag, posts, shadowed, tier FROM homes',
+  home: 'SELECT entity, tag, posts, tier FROM homes',
 }
 
 function tagTable(db: Database, layer: Layer, table: 'tag' | 'home', context: Context): Writer {
   const { eid, masks, score } = context
   const writer = new Writer(join(context.out, layer, table), context.target)
-  const rows: [key: string, at: number, posts: number, character: boolean, shadowed: boolean, tier?: number][] = []
+  const rows: [key: string, at: number, posts: number, character: boolean, tier?: number][] = []
   for (const row of db
-    .query<{ entity: string; tag: string; posts: number | null; shadowed?: number; tier?: number }, []>(TAG_SQL[table])
+    .query<{ entity: string; tag: string; posts: number | null; tier?: number }, []>(TAG_SQL[table])
     .iterate()) {
     const at = eid.get(row.entity)
     const key = flat(qualifiers(row.tag).base)
     if (at !== undefined && key) {
-      rows.push([key, at, Math.round(row.posts ?? 0), row.entity.startsWith('c/'), row.shadowed === 1, row.tier])
+      rows.push([key, at, Math.round(row.posts ?? 0), row.entity.startsWith('c/'), row.tier])
     }
   }
   rows.sort((a, b) => compare(a[0], b[0]) || a[1] - b[1] || b[2] - a[2])
   let last: [string, number] | undefined
-  for (const [key, at, posts, character, shadowed, tier] of rows) {
+  for (const [key, at, posts, character, tier] of rows) {
     if (last && last[0] === key && last[1] === at) continue
     last = [key, at]
-    const flags =
-      (character ? CHARACTER : 0) | (score.adult[at] ? ADULT : 0) | (shadowed ? SHADOWED : 0) | (masks[at] ?? 0)
+    const flags = (character ? CHARACTER : 0) | (score.adult[at] ? ADULT : 0) | (masks[at] ?? 0)
     writer.add(
       [
         key,
@@ -449,13 +447,13 @@ export async function chunk(dir: string, target = 32_768): Promise<void> {
     const path = join(dir, `${layer}.sqlite`)
     if (existsSync(path)) dbs.set(layer, new Database(path, { readonly: true }))
   }
-  const core = dbs.get('core')
-  if (!core) throw new Error(`aninames: ${join(dir, 'core.sqlite')} is missing; run mise run build`)
+  const spine = dbs.get(SPINE)
+  if (!spine) throw new Error(`aninames: ${join(dir, `${SPINE}.sqlite`)} is missing; run mise run build`)
   const out = join(dir, 'site')
   rmSync(out, { recursive: true, force: true })
   const { eid, masks } = numbering(dbs)
   const context: Context = { eid, masks, score: scores(dbs, eid), out, target }
-  const built = builtAt(core)
+  const built = builtAt(spine)
   const layers: Partial<Record<Layer, Record<Table, Packed>>> = {}
   let files = 0
   let gz = 0

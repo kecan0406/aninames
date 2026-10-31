@@ -3,16 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Rows, View } from '../src/client/chunks.ts'
-import {
-  CHARACTER,
-  FORMAT,
-  KEY_TABLES,
-  type KeyRow,
-  pack,
-  present,
-  readManifest,
-  SHADOWED,
-} from '../src/client/format.ts'
+import { CHARACTER, FORMAT, KEY_TABLES, type KeyRow, pack, present, readManifest } from '../src/client/format.ts'
 import { decode, Names } from '../src/client/names.ts'
 import { compare } from '../src/client/order.ts'
 import { fileSource } from '../src/client/source.ts'
@@ -31,12 +22,12 @@ test('range lookups find equal keys that straddle chunk files', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
   try {
     const keys = ['a', 'b', 'b', 'b', 'b', 'b', 'c', 'd']
-    const flat = new Writer(join(dir, 'core', 'flat'), 45)
+    const flat = new Writer(join(dir, 'unlicensed', 'flat'), 45)
     keys.forEach((key, eid) => {
       flat.add([key, eid, 1000, 8, 0, 0, 0], key)
     })
     flat.flush()
-    const entity = new Writer(join(dir, 'core', 'entity'), 120)
+    const entity = new Writer(join(dir, 'unlicensed', 'entity'), 120)
     for (let eid = 0; eid < 6; eid++) {
       const id = `c/x:${eid}`
       entity.add([eid, id, [[`name ${eid}`, 'en', 0, 0]], [], [], [], 0, 0, 0, 0], id, eid)
@@ -44,15 +35,15 @@ test('range lookups find equal keys that straddle chunk files', async () => {
     entity.flush()
     const empty = pack([], [])
     const tables = Object.fromEntries(KEY_TABLES.map((table) => [table, empty]))
-    const layers = { core: { ...tables, flat: flat.packed(false), entity: entity.packed(true) } }
+    const layers = { unlicensed: { ...tables, flat: flat.packed(false), entity: entity.packed(true) } }
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ aninames: FORMAT, built: '', layers }))
     const source = fileSource(dir)
     const manifest = readManifest(await source.manifest())
-    expect(manifest.layers.get('core')?.keys.flat.bounds).toEqual(['', 'b', 'b', 'c'])
+    expect(manifest.layers.get('unlicensed')?.keys.flat.bounds).toEqual(['', 'b', 'b', 'c'])
     const loaded = new Map<string, Rows>()
     const settle = async <T>(read: (view: View) => T): Promise<T> => {
       for (;;) {
-        const view = new View(manifest, ['core'], (path) => loaded.get(path))
+        const view = new View(manifest, ['unlicensed'], (path) => loaded.get(path))
         const value = read(view)
         if (view.wanted.size === 0) return value
         for (const path of view.wanted) loaded.set(path, decode(path, await source.file(path)))
@@ -81,12 +72,12 @@ test('range lookups find equal keys that straddle chunk files', async () => {
 test('tagged finds the entities of a Danbooru tag whatever its punctuation and qualifier, with their refs and facts', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
   try {
-    const tag = new Writer(join(dir, 'core', 'tag'), 4096)
-    tag.add(['pip', 1, 30, CHARACTER | present('core'), 0, 0, 0], 'pip')
-    tag.add(['starfallharbor', 0, 40, present('core'), 0, 5, 0], 'starfallharbor')
-    tag.add(['starfallharbor', 2, 120, present('core'), 0, 9, 0], 'starfallharbor')
+    const tag = new Writer(join(dir, 'unlicensed', 'tag'), 4096)
+    tag.add(['pip', 1, 30, CHARACTER | present('unlicensed'), 0, 0, 0], 'pip')
+    tag.add(['starfallharbor', 0, 40, present('unlicensed'), 0, 5, 0], 'starfallharbor')
+    tag.add(['starfallharbor', 2, 120, present('unlicensed'), 0, 9, 0], 'starfallharbor')
     tag.flush()
-    const entity = new Writer(join(dir, 'core', 'entity'), 4096)
+    const entity = new Writer(join(dir, 'unlicensed', 'entity'), 4096)
     const rows = [
       [
         0,
@@ -130,7 +121,7 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
     entity.flush()
     const empty = pack([], [])
     const keys = Object.fromEntries(KEY_TABLES.map((table) => [table, empty]))
-    const layers = { core: { ...keys, tag: tag.packed(false), entity: entity.packed(true) } }
+    const layers = { unlicensed: { ...keys, tag: tag.packed(false), entity: entity.packed(true) } }
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ aninames: FORMAT, built: '', layers }))
     const names = new Names(fileSource(dir))
     const works = await names.tagged('Starfall-Harbor', { kind: 'work' })
@@ -150,58 +141,49 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
   }
 })
 
-test('cast lists the characters at home in a tag by role before posts, and a home a higher layer names shadows the one below', async () => {
+test('cast lists the characters at home in a tag by role before posts', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
   try {
-    const both = present('core') | present('unlicensed')
-    const write = (layer: 'core' | 'unlicensed', homes: unknown[][], rows: unknown[][]) => {
-      const home = new Writer(join(dir, layer, 'home'), 4096)
-      for (const row of homes) home.add(row, row[0] as string)
-      home.flush()
-      const entity = new Writer(join(dir, layer, 'entity'), 4096)
-      for (const row of rows) entity.add(row, row[1] as string, row[0] as number)
-      entity.flush()
-      const empty = pack([], [])
-      const keys = Object.fromEntries(KEY_TABLES.map((table) => [table, empty]))
-      return { ...keys, tag: empty, home: home.packed(false), entity: entity.packed(true) }
-    }
-    const core = write(
-      'core',
+    const here = CHARACTER | present('unlicensed')
+    const home = new Writer(join(dir, 'unlicensed', 'home'), 4096)
+    for (const row of [
+      ['starfallharbor', 1, 50, here, 0, 4, 0, 1],
+      ['starfallharbor', 5, 900, here, 0, 9, 0, 2],
+      ['tidepoolacademy', 3, 80, here, 0, 7, 0, 1],
+    ])
+      home.add(row, row[0] as string)
+    home.flush()
+    const entity = new Writer(join(dir, 'unlicensed', 'entity'), 4096)
+    for (const row of [
+      [1, 'c/x:1', [['Pip', 'en', 0, 0]], [['pip_(starfall_harbor)', 50]], [], [], 0, 4, 0, 0, [], 'starfall_harbor'],
       [
-        ['starfallharbor', 1, 0, CHARACTER | both, 0, 4, 0, 2],
-        ['starfallharbor', 3, 0, CHARACTER | SHADOWED | both, 0, 7, 0, 2],
+        3,
+        'c/x:3',
+        [['Wren', 'en', 0, 0]],
+        [['wren_(tidepool_academy)', 80]],
+        [],
+        [],
+        0,
+        7,
+        0,
+        0,
+        [],
+        'tidepool_academy',
       ],
-      [
-        [1, 'c/x:1', [['Pip', 'en', 0, 0]], [], [], [], 0, 4, 0, 0, [], 'starfall_harbor'],
-        [3, 'c/x:3', [['Wren', 'en', 0, 0]], [], [], [], 0, 7, 0, 0, [], 'starfall_harbor'],
-      ],
-    )
-    const unlicensed = write(
-      'unlicensed',
-      [
-        ['starfallharbor', 1, 50, CHARACTER | both, 0, 4, 0, 1],
-        ['starfallharbor', 5, 900, CHARACTER | present('unlicensed'), 0, 9, 0, 3],
-        ['tidepoolacademy', 3, 80, CHARACTER | both, 0, 7, 0, 1],
-      ],
-      [
-        [1, 'c/x:1', [], [['pip_(starfall_harbor)', 50]], [], [], 0, 4, 0, 0, [], 'starfall_harbor'],
-        [3, 'c/x:3', [], [['wren_(tidepool_academy)', 80]], [], [], 0, 7, 0, 0, [], 'tidepool_academy'],
-        [5, 'c/x:5', [], [['doodle_pip_(starfall_harbor)', 900]], [], [], 0, 9, 0, 0, [], 'starfall_harbor'],
-      ],
-    )
-    writeFileSync(
-      join(dir, 'manifest.json'),
-      JSON.stringify({ aninames: FORMAT, built: '', layers: { core, unlicensed } }),
-    )
+      [5, 'c/x:5', [], [['doodle_pip_(starfall_harbor)', 900]], [], [], 0, 9, 0, 0, [], 'starfall_harbor'],
+    ] as const)
+      entity.add([...row], row[1], row[0])
+    entity.flush()
+    const empty = pack([], [])
+    const keys = Object.fromEntries(KEY_TABLES.map((table) => [table, empty]))
+    const unlicensed = { ...keys, tag: empty, home: home.packed(false), entity: entity.packed(true) }
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ aninames: FORMAT, built: '', layers: { unlicensed } }))
     const names = new Names(fileSource(dir))
     expect((await names.cast('Starfall Harbor')).map((found) => found.id)).toEqual(['c/x:1', 'c/x:5'])
+    expect((await names.cast('starfall_harbor', { limit: 1 })).map((found) => found.id)).toEqual(['c/x:1'])
     expect((await names.cast('tidepool_academy')).map((found) => [found.id, found.home])).toEqual([
       ['c/x:3', 'tidepool_academy'],
     ])
-    const coreOnly = new Names(fileSource(dir), { layers: ['core'] })
-    expect((await coreOnly.cast('starfall_harbor')).map((found) => found.id)).toEqual(['c/x:3', 'c/x:1'])
-    expect((await coreOnly.cast('starfall_harbor', { limit: 1 })).map((found) => found.id)).toEqual(['c/x:3'])
-    expect((await coreOnly.lookup(['c/x:3']))[0]?.home).toBe('starfall_harbor')
     expect((await names.lookup(['c/x:3']))[0]?.home).toBe('tidepool_academy')
   } finally {
     rmSync(dir, { recursive: true, force: true })

@@ -4,6 +4,8 @@ export type Layer = 'core' | 'kowiki' | 'unlicensed'
 
 export const LAYERS: readonly Layer[] = ['core', 'kowiki', 'unlicensed']
 
+export const SPINE: Layer = 'unlicensed'
+
 export const USER_AGENT = 'aninames/0.1 (+https://github.com/kecan0406/aninames)'
 
 export type NameKind = 'main' | 'official' | 'synonym' | 'short' | 'reading' | 'redirect' | 'section' | 'generated'
@@ -50,9 +52,7 @@ export interface Entry {
   names: Name[]
   works?: Ref[]
   roles?: [work: Ref, role: Role][]
-  series?: Ref[]
   within?: Ref[]
-  basis?: Ref[]
   related?: Ref[]
   near?: Ref[]
   link?: string[]

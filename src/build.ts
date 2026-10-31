@@ -2,7 +2,6 @@ import { Database } from 'bun:sqlite'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { alike, levelsOf, tiesOf, upward, wordsOf } from './graph.ts'
-import { foldHan } from './han.ts'
 import { type Appearance, type Choice, chosenOf, FLOOR, homeOf, learnedOf, tierOf, weightOf } from './homes.ts'
 import {
   type Entry,
@@ -11,12 +10,12 @@ import {
   type Layer,
   type Name,
   type NameKind,
-  type Namespace,
   ROLES,
   type Source,
+  SPINE,
 } from './model.ts'
-import { mergeCharacters, workTitles } from './resolve.ts'
 import { load, NAMES } from './sources/index.ts'
+import { BANGUMI, link, MEDIUM_ORDER, type Medium, mediaOf, workTitles } from './spine.ts'
 import { readStage, stagePath } from './stage.ts'
 import {
   flat,
@@ -31,52 +30,15 @@ import {
   soundKeys,
   titleKey,
 } from './text.ts'
-import { node, Union } from './union.ts'
+import { node, refOf, type Union } from './union.ts'
 
 export const DIST = join(import.meta.dirname, '..', 'dist')
-
-const STRENGTH: Namespace[] = [
-  'wikidata',
-  'mal',
-  'anilist',
-  'anidb',
-  'vndb',
-  'kitsu',
-  'ann',
-  'bangumi',
-  'danbooru',
-  'animeplanet',
-  'anisearch',
-  'livechart',
-  'simkl',
-  'animecountdown',
-  'tmdb',
-  'igdb',
-  'steam',
-  'kowiki',
-  'anissia',
-]
-
-const LAYER_ORDER: Record<Layer, number> = { core: 0, kowiki: 1, unlicensed: 2 }
 
 export interface Staged {
   source: string
   layer: Layer
   entry: Entry
   popularity: number
-}
-
-function strength(ref: string): number {
-  const index = STRENGTH.indexOf(ref.slice(0, ref.indexOf(':')) as Namespace)
-  return index < 0 ? STRENGTH.length : index
-}
-
-function strongest(refs: Iterable<string>): string {
-  let best = ''
-  for (const ref of refs) {
-    if (!best || strength(ref) < strength(best) || (strength(ref) === strength(best) && ref < best)) best = ref
-  }
-  return best
 }
 
 export async function readAll(): Promise<{ all: Staged[]; sources: Source[] }> {
@@ -121,156 +83,36 @@ interface Entity {
   members: Staged[]
 }
 
-function mergeKey(text: string, kind: Kind, medium: string): string | undefined {
-  const base = qualifiers(text).base
-  if (japanese(base)) {
-    const key = foldHan(flat(base))
-    return [...key].length >= (kind === 'work' ? 4 : 3) ? `${medium}|${key}` : undefined
-  }
-  if (kind !== 'character' || !/^[\p{Script=Latin}\s.'’-]+$/u.test(base.normalize('NFKD').replace(/\p{M}/gu, '')))
-    return undefined
-  const tokens = latinKey(base)
-    .split(' ')
-    .filter((token) => token.length >= 2)
-  return tokens.length >= 2 ? `latin|${tokens.join(' ')}` : undefined
-}
-
-function nameIndex(staged: Staged[], kind: Kind): Map<string, Map<string, Set<string>>> {
-  const index = new Map<string, Map<string, Set<string>>>()
-  for (const s of staged) {
-    if (s.entry.attach || s.entry.kind !== kind) continue
-    const self = node(kind, s.entry.id)
-    const medium = kind === 'work' ? mediaOf(s)[0] : ''
-    if (medium === undefined) continue
-    for (const name of s.entry.names) {
-      if (name.kind === 'reading' || name.kind === 'short') continue
-      const key = mergeKey(name.text, kind, medium)
-      if (!key) continue
-      let bySource = index.get(key)
-      if (!bySource) {
-        bySource = new Map()
-        index.set(key, bySource)
-      }
-      let nodes = bySource.get(s.source)
-      if (!nodes) {
-        nodes = new Set()
-        bySource.set(s.source, nodes)
-      }
-      nodes.add(self)
-    }
-  }
-  return index
-}
-
-function yearsApart(a: Set<number> | undefined, b: Set<number> | undefined): boolean {
-  if (!a?.size || !b?.size) return false
-  return ![...a].some((x) => [...b].some((y) => Math.abs(x - y) <= 1))
-}
-
-function mergeByName(union: Union, staged: Staged[], kind: Kind): number {
-  const sources = new Map<string, Set<string>>()
-  const years = new Map<string, Set<number>>()
-  for (const s of staged) {
-    if (s.entry.attach || s.entry.kind !== kind) continue
-    const root = union.find(node(kind, s.entry.id))
-    let set = sources.get(root)
-    if (!set) {
-      set = new Set()
-      sources.set(root, set)
-    }
-    set.add(s.source)
-    if (s.entry.year) {
-      let found = years.get(root)
-      if (!found) {
-        found = new Set()
-        years.set(root, found)
-      }
-      found.add(s.entry.year)
-    }
-  }
-  let merged = 0
-  for (const bySource of nameIndex(staged, kind).values()) {
-    if (bySource.size < 2) continue
-    const groups = [...bySource.values()].map((nodes) => new Set([...nodes].map((n) => union.find(n))))
-    const all = [...new Set(groups.flatMap((roots) => [...roots]))]
-    let anchor = all[0]
-    if (groups.some((roots) => roots.size !== 1)) {
-      const anchored = all.filter((root) => union.anchored(root))
-      if (anchored.length !== 1) continue
-      anchor = anchored[0]
-    }
-    if (anchor === undefined) continue
-    for (const roots of groups) {
-      if (roots.size !== 1) continue
-      const a = union.find(anchor)
-      const b = union.find([...roots][0] ?? '')
-      if (a === b) continue
-      const sa = sources.get(a) ?? new Set<string>()
-      const sb = sources.get(b) ?? new Set<string>()
-      if ([...sa].some((source) => sb.has(source))) continue
-      if (kind === 'work' && yearsApart(years.get(a), years.get(b))) continue
-      if (!union.union(a, b)) continue
-      const root = union.find(a)
-      sources.set(root, new Set([...sa, ...sb]))
-      years.set(root, new Set([...(years.get(a) ?? []), ...(years.get(b) ?? [])]))
-      merged++
-    }
-  }
-  return merged
-}
-
-export function link(staged: Staged[], hide = false): Union {
-  const union = new Union()
-  for (const s of staged) {
-    const { entry } = s
-    if (entry.attach || !entry.kind) continue
-    const self = node(entry.kind, entry.id)
-    union.add(self)
-    const own = `${entry.id.slice(0, entry.id.indexOf(':'))}:`
-    for (const ref of entry.refs ?? []) {
-      if (hide && entry.kind === 'character' && !ref.startsWith(own)) continue
-      union.union(self, node(entry.kind, ref))
-    }
-  }
-  console.log(`build: refused ${union.refused} unions that would join two Wikidata items`)
-  const works = mergeByName(union, staged, 'work')
-  console.log(`build: merged ${works} work pairs by a Japanese title unique in each source and medium`)
-  const merged = mergeCharacters(union, staged, workTitles(union, staged))
-  console.log(`build: merged ${merged} character pairs by name`)
-  return union
-}
-
-function resolveEntities(staged: Staged[]): { union: Union; entities: Map<string, Entity> } {
+function resolveEntities(staged: Staged[]): { union: Union; entities: Map<string, Entity>; dropped: number } {
   const union = link(staged)
   const entities = new Map<string, Entity>()
-  const refsByRoot = new Map<string, Set<string>>()
+  let dropped = 0
   for (const s of staged) {
     const { entry } = s
     if (entry.attach || !entry.kind) continue
-    const root = union.find(node(entry.kind, entry.id))
+    const key = node(entry.kind, entry.id)
+    const anchor = union.anchorOf(key)
+    if (!anchor) {
+      dropped++
+      continue
+    }
+    const root = union.find(key)
     let entity = entities.get(root)
     if (!entity) {
-      entity = { id: '', kind: entry.kind, layer: s.layer, members: [] }
+      entity = {
+        id: `${entry.kind === 'work' ? 'w' : 'c'}/${refOf(anchor)}`,
+        kind: entry.kind,
+        layer: SPINE,
+        members: [],
+      }
       entities.set(root, entity)
-      refsByRoot.set(root, new Set())
     }
     entity.members.push(s)
-    if (LAYER_ORDER[s.layer] < LAYER_ORDER[entity.layer]) entity.layer = s.layer
-    const refs = refsByRoot.get(root)
-    refs?.add(entry.id)
-    for (const ref of entry.refs ?? []) if (union.find(node(entry.kind, ref)) === root) refs?.add(ref)
   }
-  for (const [root, entity] of entities) {
-    const coreRefs = new Set<string>()
-    for (const m of entity.members) {
-      if (m.layer !== entity.layer) continue
-      coreRefs.add(m.entry.id)
-      for (const ref of m.entry.refs ?? []) if (union.find(node(entity.kind, ref)) === root) coreRefs.add(ref)
-    }
-    entity.id = `${entity.kind === 'work' ? 'w' : 'c'}/${strongest(coreRefs.size > 0 ? coreRefs : (refsByRoot.get(root) ?? []))}`
-  }
-  return { union, entities }
+  return { union, entities, dropped }
 }
+
+const own = (s: Staged) => s.source === BANGUMI
 
 const HUB = 200
 
@@ -343,7 +185,8 @@ function linksOf(union: Union, entities: Map<string, Entity>): Map<string, Set<s
   for (const [root, entity] of entities) {
     if (entity.kind !== 'work') continue
     for (const m of entity.members) {
-      for (const other of [...tiesOf(m.entry), ...(m.entry.near ?? [])]) {
+      if (!own(m)) continue
+      for (const other of tiesOf(m.entry)) {
         const key = node('work', other)
         const there = union.has(key) ? union.find(key) : undefined
         if (there && there !== root) tie(root, there)
@@ -358,7 +201,7 @@ function parentsOf(union: Union, entities: Map<string, Entity>): Map<string, Set
   for (const [root, entity] of entities) {
     if (entity.kind !== 'work') continue
     for (const m of entity.members) {
-      if (m.entry.attach) continue
+      if (!own(m)) continue
       for (const ref of upward(m.entry)) {
         const key = node('work', ref)
         const there = union.has(key) ? union.find(key) : undefined
@@ -380,7 +223,7 @@ function attachEntries(
   entities: Map<string, Entity>,
   links: ReadonlyMap<string, ReadonlySet<string>>,
   titles: ReadonlyMap<string, ReadonlySet<string>>,
-): { attached: number; missed: number } {
+): { attached: number; missed: number; spread: Map<string, Set<string>> } {
   const workNames = new Map<string, Set<string>>()
   for (const [root, entity] of entities) {
     if (entity.kind !== 'work') continue
@@ -415,6 +258,7 @@ function attachEntries(
   for (const [root, entity] of entities) {
     for (const m of entity.members) {
       if (entity.kind === 'work') {
+        if (!own(m)) continue
         for (const other of tiesOf(m.entry)) {
           const there = workRoot(other)
           if (there && there !== root) {
@@ -424,15 +268,14 @@ function attachEntries(
         }
         continue
       }
-      for (const work of m.entry.works ?? []) {
-        const there = workRoot(work)
-        if (there) remember(characterWorks, root, there)
-      }
-      for (const work of [...(m.entry.works ?? []), ...(m.entry.series ?? [])]) {
-        const there = workRoot(work)
-        if (!there) continue
-        remember(cast, there, root)
-        remember(casts, root, there)
+      if (own(m)) {
+        for (const work of m.entry.works ?? []) {
+          const there = workRoot(work)
+          if (!there) continue
+          remember(characterWorks, root, there)
+          remember(cast, there, root)
+          remember(casts, root, there)
+        }
       }
       for (const name of m.entry.names) {
         if (name.kind === 'reading' || !japanese(name.text)) continue
@@ -471,7 +314,7 @@ function attachEntries(
   const small = (character: string) => (casts.get(character)?.size ?? 0) <= HUB
   const tied = (a: string, b: string) =>
     (links.get(a)?.has(b) ?? false) || meets(links.get(a), links.get(b)) || meets(cast.get(a), cast.get(b), small)
-  const familyFor = (entry: Entry): { targets: Entity[]; head: Entity | undefined } => {
+  const familyFor = (entry: Entry): { targets: Entity[]; head: Entity | undefined; reached: Set<string> } => {
     const anchors = new Set<string>()
     const own = workRoot(entry.id)
     if (own && entities.has(own)) anchors.add(own)
@@ -492,8 +335,18 @@ function attachEntries(
         const [x, y] = [entities.get(a), entities.get(b)]
         return (x && y ? firstYear(x) - firstYear(y) : 0) || (a < b ? -1 : a > b ? 1 : 0)
       })[0]
-    return { targets: chosen.flatMap((root) => entities.get(root) ?? []), head: entities.get(head ?? '') }
+    const reached = new Set(chosen)
+    for (const queue = [...chosen]; queue.length > 0; ) {
+      for (const other of links.get(queue.pop() as string) ?? []) {
+        if (reached.has(other)) continue
+        reached.add(other)
+        queue.push(other)
+      }
+    }
+    for (const root of chosen) reached.delete(root)
+    return { targets: chosen.flatMap((root) => entities.get(root) ?? []), head: entities.get(head ?? ''), reached }
   }
+  const spread = new Map<string, Set<string>>()
   let attached = 0
   let missed = 0
   for (const s of staged) {
@@ -508,9 +361,10 @@ function attachEntries(
       continue
     }
     if (entry.family) {
-      const { targets, head } = familyFor(entry)
+      const { targets, head, reached } = familyFor(entry)
       const tag: Staged = { ...s, entry: { id: entry.id, kind: 'work', attach: true, names: [] }, popularity: 0 }
       for (const found of targets) found.members.push(found === head ? s : tag)
+      for (const root of reached) remember(spread, root, entry.id.slice(TAG.length))
       if (targets.length > 0) attached++
       else missed++
       continue
@@ -530,17 +384,18 @@ function attachEntries(
     if (!target && entry.link?.length && kinds.includes('work')) {
       const roots = new Set<string>()
       for (const text of entry.link) for (const root of workNames.get(flat(text)) ?? []) roots.add(root)
-      if (roots.size <= 3)
-        for (const root of roots) {
-          const found = entities.get(root)
-          if (found) targets.push(found)
-        }
+      const media = new Set<Medium | null>(mediaOf(s))
+      const fitting = [...roots].flatMap((root) => {
+        const found = entities.get(root)
+        return found && (media.size === 0 || media.has(mediumOf(found))) ? [found] : []
+      })
+      if (fitting.length === 1) targets.push(fitting[0] as Entity)
     }
     for (const found of targets) found.members.push(s)
     if (targets.length > 0) attached++
     else missed++
   }
-  return { attached, missed }
+  return { attached, missed, spread }
 }
 
 interface Home {
@@ -551,14 +406,13 @@ interface Home {
 
 const TAG = 'danbooru:'
 
-function tagsOf(root: string, entity: Entity, union: Union, seen: (s: Staged) => boolean): Map<string, number | null> {
+function tagsOf(root: string, entity: Entity, union: Union): Map<string, number | null> {
   const tags = new Map<string, number | null>()
   const add = (tag: string, posts: number | null) => {
     const known = tags.get(tag)
     if (!tags.has(tag) || (posts ?? -1) > (known ?? -1)) tags.set(tag, posts)
   }
   for (const m of entity.members) {
-    if (!seen(m)) continue
     const { entry } = m
     if (entry.id.startsWith(TAG) && (entry.attach || union.find(node(entity.kind, entry.id)) === root)) {
       add(entry.id.slice(TAG.length), entry.rank ?? null)
@@ -576,7 +430,7 @@ function homesOf(
   parents: ReadonlyMap<string, ReadonlySet<string>>,
   links: ReadonlyMap<string, ReadonlySet<string>>,
   families: ReadonlyMap<string, number | null>,
-  seen: (s: Staged) => boolean,
+  spread: ReadonlyMap<string, ReadonlySet<string>>,
 ): Map<string, Home> {
   const workRoot = (ref: string) => {
     const key = node('work', ref)
@@ -589,7 +443,7 @@ function homesOf(
   }
   for (const [root, entity] of entities) {
     if (entity.kind !== 'work') continue
-    const tags = tagsOf(root, entity, union, seen)
+    const tags = tagsOf(root, entity, union)
     if (tags.size === 0) continue
     workTags.set(root, tags)
     for (const [tag, count] of tags) more(tag, count)
@@ -609,6 +463,9 @@ function homesOf(
     for (const [at, level] of levelsOf(parents, root)) {
       for (const tag of workTags.get(at)?.keys() ?? []) {
         if (level < (found.get(tag) ?? Number.POSITIVE_INFINITY)) found.set(tag, level)
+      }
+      for (const tag of spread.get(at) ?? []) {
+        if (level + 1 < (found.get(tag) ?? Number.POSITIVE_INFINITY)) found.set(tag, level + 1)
       }
     }
     return found
@@ -655,31 +512,22 @@ function homesOf(
     quals: string[]
     voted: Set<string>
     choice: Choice | undefined
-    franchise: string | undefined
     posts: number | null
     roles: Map<string, number>
-    known: boolean
   }[] = []
   const learning = new Map<string, Map<string, number>>()
   for (const [root, entity] of entities) {
     if (entity.kind !== 'character') continue
-    const own = [...tagsOf(root, entity, union, seen)].sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1))
-    const quals = own.flatMap(([tag]) => {
+    const tagged = [...tagsOf(root, entity, union)].sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1))
+    const quals = tagged.flatMap(([tag]) => {
       const found = qualifiers(tag).quals
       const key = found.length === 1 ? flat(found[0] ?? '') : ''
       return key ? [key] : []
     })
-    const series = new Set<string>()
     const works = new Set<string>()
     const roles = new Map<string, number>()
-    let known = false
     for (const m of entity.members) {
-      if (!seen(m)) continue
-      known ||= m.source !== 'danbooru'
-      for (const ref of m.entry.series ?? []) {
-        const there = workRoot(ref)
-        if (there) series.add(there)
-      }
+      if (!own(m)) continue
       for (const ref of m.entry.works ?? []) {
         const there = workRoot(ref)
         if (there) works.add(there)
@@ -691,7 +539,7 @@ function homesOf(
         roles.set(there, Math.min(roles.get(there) ?? ROLES.length, ROLES.indexOf(role)))
       }
     }
-    const best = own.find(([, count]) => count !== null)?.[1] ?? null
+    const best = tagged.find(([, count]) => count !== null)?.[1] ?? null
     const appearances: Appearance[] = [...works].map((work) => ({
       weight: weightOf(roles.get(work)),
       tags: tagsUp(work),
@@ -701,14 +549,11 @@ function homesOf(
       return best === null || count === null || count === undefined || count >= FLOOR * best
     }
     const choice = chosenOf(appearances, fits, postsOf)
-    const franchise = [...series]
-      .flatMap((there) => [...tagsUp(there)])
-      .sort((a, b) => a[1] - b[1] || postsOf(b[0]) - postsOf(a[0]))[0]?.[0]
-    if (quals.length === 0 && !choice && !franchise) continue
+    if (quals.length === 0 && !choice) continue
     const voted = new Set(appearances.flatMap((appearance) => [...appearance.tags.keys()]))
-    chosen.push({ id: entity.id, quals, voted, choice, franchise, posts: best, roles, known })
+    chosen.push({ id: entity.id, quals, voted, choice, posts: best, roles })
     const qual = quals[0]
-    const found = choice?.tag ?? franchise
+    const found = choice?.tag
     if (qual && found) {
       const tags = learning.get(qual) ?? new Map<string, number>()
       tags.set(found, (tags.get(found) ?? 0) + 1)
@@ -717,13 +562,13 @@ function homesOf(
   }
   const learned = learnedOf(learning)
   const homes = new Map<string, Home>()
-  for (const { id, quals, voted, choice, franchise, posts: count, roles, known } of chosen) {
+  for (const { id, quals, voted, choice, posts: count, roles } of chosen) {
     const named = quals.map((qual) => direct.get(qual)).find(Boolean)
     const taught = quals
       .map((qual) => learned.get(qual))
       .find((tag) => tag !== undefined && (voted.size === 0 || voted.has(tag)))
-    const tag = homeOf(choice, named, franchise, taught)
-    if (tag) homes.set(id, { tag, posts: count, tier: tierOf(roles, (work) => tagsUp(work).has(tag), known) })
+    const tag = homeOf(choice, named, undefined, taught)
+    if (tag) homes.set(id, { tag, posts: count, tier: tierOf(roles, (work) => tagsUp(work).has(tag), true) })
   }
   return homes
 }
@@ -846,37 +691,12 @@ function preferencesOf(entity: Entity, layer: Layer, rows: Row[], titles: Map<st
   return out
 }
 
-const ANIME_TYPES = new Set(['TV', 'MOVIE', 'OVA', 'ONA', 'SPECIAL', 'UNKNOWN'])
-
-const MEDIUM_ORDER = ['anime', 'vn', 'game', 'manga', 'novel'] as const
-
-type Medium = (typeof MEDIUM_ORDER)[number]
-
-function mediaOf(staged: Staged): Medium[] {
-  const { entry, source } = staged
-  const out: Medium[] = []
-  if (source === 'aod' || source === 'anidb' || source === 'anissia') out.push('anime')
-  if (source === 'vndb' && entry.id.startsWith('vndb:v')) out.push('vn')
-  if (source === 'bangumi') {
-    if (entry.type === 'GAME') out.push('game')
-    else if (entry.type === 'MANGA') out.push('manga')
-    else if (entry.type === 'LIGHT_NOVEL') out.push('novel')
-    else if (entry.type && ANIME_TYPES.has(entry.type)) out.push('anime')
-  }
-  for (const ref of [entry.id, ...(entry.refs ?? [])]) {
-    const [ns = '', id = ''] = ref.split(/:(.*)/s)
-    if (id.startsWith('manga/')) out.push('manga')
-    else if (['mal', 'anilist', 'anidb', 'kitsu', 'ann'].includes(ns)) out.push('anime')
-    else if (ns === 'vndb' && id.startsWith('v')) out.push('vn')
-    else if (ns === 'igdb' || ns === 'steam') out.push('game')
-  }
-  return out
-}
-
 function mediumOf(entity: Entity): Medium | null {
   if (entity.kind !== 'work') return null
-  const found = new Set(entity.members.filter((m) => !m.entry.attach && m.layer === entity.layer).flatMap(mediaOf))
-  return MEDIUM_ORDER.find((medium) => found.has(medium)) ?? null
+  const found = new Set(entity.members.filter(own).flatMap(mediaOf))
+  const medium = MEDIUM_ORDER.find((at) => found.has(at)) ?? null
+  if (medium === 'game' && entity.members.some((m) => mediaOf(m).includes('vn'))) return 'vn'
+  return medium
 }
 
 function partsOf(text: string): string[] {
@@ -905,9 +725,7 @@ function schema(db: Database): void {
   db.run('CREATE TABLE related (work TEXT NOT NULL, other TEXT NOT NULL)')
   db.run('CREATE TABLE ranks (entity TEXT PRIMARY KEY, rank REAL NOT NULL)')
   db.run('CREATE TABLE adults (entity TEXT PRIMARY KEY)')
-  db.run(
-    'CREATE TABLE homes (entity TEXT PRIMARY KEY, tag TEXT NOT NULL, posts INTEGER, shadowed INTEGER NOT NULL, tier INTEGER NOT NULL)',
-  )
+  db.run('CREATE TABLE homes (entity TEXT PRIMARY KEY, tag TEXT NOT NULL, posts INTEGER, tier INTEGER NOT NULL)')
 }
 
 function indexes(db: Database): void {
@@ -950,21 +768,18 @@ export function adultCharactersOf(
 export async function build(): Promise<void> {
   const started = performance.now()
   const { all: staged, sources } = await readAll()
-  const { union, entities } = resolveEntities(staged)
+  const { union, entities, dropped } = resolveEntities(staged)
   const titles = workTitles(union, staged)
   const links = linksOf(union, entities)
-  const { attached, missed } = attachEntries(union, staged, entities, links, titles)
+  const { attached, missed, spread } = attachEntries(union, staged, entities, links, titles)
   const parents = parentsOf(union, entities)
-  console.log(`build: ${entities.size} entities, ${attached} attach entries placed, ${missed} found no entity`)
+  console.log(
+    `build: ${entities.size} entities from Bangumi, ${dropped} entries of other sources reached none; ${attached} attach entries placed, ${missed} found no entity`,
+  )
   const families = new Map<string, number | null>()
   for (const s of staged) if (s.entry.family) families.set(s.entry.id.slice(TAG.length), s.entry.rank ?? null)
-  const homes: Partial<Record<Layer, Map<string, Home>>> = {
-    core: homesOf(union, entities, parents, links, new Map(), (s) => s.layer === 'core'),
-    unlicensed: homesOf(union, entities, parents, links, families, () => true),
-  }
-  console.log(
-    `build: ${homes.core?.size} characters have a home tag from core, ${homes.unlicensed?.size} from every layer`,
-  )
+  const homes = homesOf(union, entities, parents, links, families, spread)
+  console.log(`build: ${homes.size} characters have a home tag`)
   const byRoot = new Map<string, string>()
   for (const [root, entity] of entities) byRoot.set(root, entity.id)
   const resolve = (kind: Kind, ref: string): string | undefined => {
@@ -976,10 +791,10 @@ export async function build(): Promise<void> {
   const adultWorks: Record<Layer, Set<string>> = { core: new Set(), kowiki: new Set(), unlicensed: new Set() }
   for (const entity of entities.values()) {
     if (entity.kind !== 'work') continue
-    for (const m of entity.members) if (m.entry.adult) adultWorks[m.layer].add(entity.id)
+    for (const m of entity.members) if (own(m) && m.entry.adult) adultWorks[m.layer].add(entity.id)
   }
   const adultCharacters = adultCharactersOf(
-    entities.values(),
+    [...entities.values()].map((entity) => ({ ...entity, members: entity.members.filter(own) })),
     (work) => resolve('work', work),
     new Set(LAYERS.flatMap((layer) => [...adultWorks[layer]])),
   )
@@ -1002,21 +817,20 @@ export async function build(): Promise<void> {
     const insertRelated = db.prepare('INSERT INTO related (work, other) VALUES (?, ?)')
     const insertRank = db.prepare('INSERT INTO ranks (entity, rank) VALUES (?, ?)')
     const insertAdult = db.prepare('INSERT INTO adults (entity) VALUES (?)')
-    const insertHome = db.prepare('INSERT INTO homes (entity, tag, posts, shadowed, tier) VALUES (?, ?, ?, ?, ?)')
+    const insertHome = db.prepare('INSERT INTO homes (entity, tag, posts, tier) VALUES (?, ?, ?, ?)')
     let nameCount = 0
     db.transaction(() => {
       for (const [root, entity] of entities) {
         if (entity.layer === layer) {
-          const first = entity.members.find((m) => m.layer === layer && !m.entry.attach)?.entry
-          const typed = entity.members.find((m) => m.entry.type)?.entry
+          const spine = entity.members.find(own)?.entry
           const dated = entity.members.find((m) => m.entry.year)?.entry
           const origin = [...new Set(entity.members.flatMap((m) => m.entry.origin ?? []))]
           insertEntity.run(
             entity.id,
             entity.kind,
             mediumOf(entity),
-            typed?.type ?? first?.type ?? null,
-            dated?.year ?? null,
+            spine?.type ?? null,
+            spine?.year ?? dated?.year ?? null,
             origin.length > 0 ? origin.join(' ') : null,
           )
         }
@@ -1030,6 +844,7 @@ export async function build(): Promise<void> {
           for (const ref of m.entry.refs ?? []) {
             if (union.find(node(entity.kind, ref)) === root && !refs.has(ref)) refs.set(ref, null)
           }
+          if (!own(m)) continue
           if (m.popularity > 0) best = Math.max(best, m.popularity)
           for (const work of m.entry.works ?? []) {
             const id = resolve('work', work)
@@ -1076,10 +891,7 @@ export async function build(): Promise<void> {
           if ([...key].length >= 2) insertInitials.run(inserted.rowid, row.entity, key)
         }
       }
-      for (const [id, home] of homes[layer] ?? []) {
-        const above = layer === 'core' ? homes.unlicensed?.get(id)?.tag : undefined
-        insertHome.run(id, home.tag, home.posts, above !== undefined && above !== home.tag ? 1 : 0, home.tier)
-      }
+      if (layer === SPINE) for (const [id, home] of homes) insertHome.run(id, home.tag, home.posts, home.tier)
       const meta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)')
       meta.run('layer', layer)
       meta.run('built', new Date().toISOString())

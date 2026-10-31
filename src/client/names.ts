@@ -1,5 +1,5 @@
 import { gunzipSync } from 'node:zlib'
-import { type Kind, LAYERS, type Layer, type NameKind } from '../model.ts'
+import { type Kind, LAYERS, type Layer, type NameKind, SPINE } from '../model.ts'
 import { flat, qualifiers } from '../text.ts'
 import { type Rows, View } from './chunks.ts'
 import { type Match, matchOf, search } from './engine.ts'
@@ -14,7 +14,6 @@ import {
   parsePath,
   readManifest,
   readRows,
-  SHADOWED,
 } from './format.ts'
 import { Missing, type Source } from './source.ts'
 
@@ -225,14 +224,12 @@ export class Names {
     const key = flat(qualifiers(tag).base)
     return this.#run(signal, (view) => {
       if (!key) return []
-      const covered = view.layers.includes('unlicensed')
       const best = new Map<number, { posts: number; mask: number; flags: number; standing: number; tier: number }>()
       for (const [, eid, posts, flags, , standing, , tier = 0] of view.tagged(key, prefix, table)) {
         if (kind && (flags & CHARACTER ? 'character' : 'work') !== kind) continue
         if (!adult && flags & ADULT) continue
-        if (covered && flags & SHADOWED) continue
         const known = best.get(eid)
-        const mask = flags & ~(CHARACTER | MAIN | ADULT | SHADOWED)
+        const mask = flags & ~(CHARACTER | MAIN | ADULT)
         if (!known || posts > known.posts) {
           best.set(eid, {
             posts,
@@ -272,7 +269,7 @@ export class Names {
 
   #view(manifest: Manifest): View {
     const layers = LAYERS.filter(
-      (layer) => (layer === 'core' || this.#layers.includes(layer)) && manifest.layers.has(layer),
+      (layer) => (layer === SPINE || this.#layers.includes(layer)) && manifest.layers.has(layer),
     )
     return new View(manifest, layers, (path) => {
       const rows = this.#cache.get(path)

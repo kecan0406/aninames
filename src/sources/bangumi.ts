@@ -2,7 +2,7 @@ import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type Entry, type Name, type NameKind, type Ref, type Role, ref, type Source } from '../model.ts'
 import { download, json } from '../net.ts'
-import { hasHangul, hasKanji, isKana } from '../text.ts'
+import { flat, hasHangul, hasKanji, isKana } from '../text.ts'
 
 const LATEST = 'https://raw.githubusercontent.com/bangumi/Archive/master/aux/latest.json'
 
@@ -12,7 +12,9 @@ const CHARACTERS = 'character.jsonlines'
 
 const CASTS = 'subject-characters.jsonlines'
 
-const FILES = [SUBJECTS, CHARACTERS, CASTS]
+const RELATIONS = 'subject-relations.jsonlines'
+
+const FILES = [SUBJECTS, CHARACTERS, CASTS, RELATIONS]
 
 const ANIME: Record<number, string> = { 1: 'TV', 2: 'OVA', 3: 'MOVIE', 4: 'SPECIAL', 5: 'ONA', 2006: 'ONA' }
 
@@ -106,6 +108,26 @@ interface Cast {
   subject_id: number
   type: number
 }
+
+interface Relation {
+  subject_id: number
+  relation_type: number
+  related_subject_id: number
+}
+
+const ABOVE = new Set([12, 1002, 1008, 4012, 4017])
+
+const BELOW = new Set([6, 1003, 1007, 4006, 4015, 4016])
+
+const BESIDE = new Set([2, 3, 4, 5, 10, 1005, 1006, 1010, 1015, 4002, 4003, 4010])
+
+const ADAPTATION = 1
+
+const SHARED = new Set([7, 8, 9, 11, 1011, 1012, 1013, 4007, 4008, 4009])
+
+const PREFIX = 4
+
+const ROLES = new Set([1, 2])
 
 interface Work {
   rank: number
@@ -283,7 +305,7 @@ function characterOf(
     id: ref('bangumi', character.id),
     kind: 'character',
     names: unique([
-      name(character.name, 'official', originOf(character.name, chinese)),
+      ...character.name.split('／').map((text) => name(text, 'official', originOf(text, chinese))),
       ...infoboxNames(found, SEPARATORS),
       ...own(character.name),
     ]),
@@ -322,6 +344,7 @@ const source: Source = {
     const cast = new Set<number>()
     for await (const each of records<Cast>(join(raw, CASTS))) cast.add(each.subject_id)
     const works = new Map<number, Work>()
+    const entries = new Map<number, Entry>()
     for await (const subject of records<Subject>(join(raw, SUBJECTS))) {
       const type = typeOf(subject)
       if (!type) continue
@@ -329,6 +352,43 @@ const source: Source = {
       const entry = workOf(subject, type, region === 'zh')
       if (type === 'GAME' && !cast.has(subject.id) && !entry.refs && (entry.rank ?? 0) < GAME_FAVORITES) continue
       works.set(subject.id, { rank: entry.rank ?? 0, region })
+      entries.set(subject.id, entry)
+    }
+    const titles = new Map<number, string>()
+    for (const [id, entry] of entries) titles.set(id, flat(entry.names[0]?.text ?? ''))
+    const alike = (a: number, b: number) => {
+      const [x = '', y = ''] = [titles.get(a), titles.get(b)]
+      if (!x || !y) return false
+      if (x.includes(y) || y.includes(x)) return true
+      const [p, q] = [[...x], [...y]]
+      let at = 0
+      while (at < p.length && at < q.length && p[at] === q[at]) at++
+      return at >= PREFIX
+    }
+    const within = new Map<number, Set<Ref>>()
+    const related = new Map<number, Set<Ref>>()
+    const near = new Map<number, Set<Ref>>()
+    const tie = (map: Map<number, Set<Ref>>, from: number, to: number) => {
+      if (from === to || !entries.has(from) || !entries.has(to)) return
+      const set = map.get(from) ?? new Set<Ref>()
+      set.add(ref('bangumi', to))
+      map.set(from, set)
+    }
+    for await (const relation of records<Relation>(join(raw, RELATIONS))) {
+      const { subject_id: from, related_subject_id: to, relation_type: type } = relation
+      if (ABOVE.has(type)) tie(within, from, to)
+      else if (BELOW.has(type)) tie(within, to, from)
+      else if (BESIDE.has(type)) tie(related, from, to)
+      else if (type === ADAPTATION) tie(alike(from, to) ? related : near, from, to)
+      else if (SHARED.has(type)) tie(near, from, to)
+    }
+    for (const [id, entry] of entries) {
+      const up = within.get(id)
+      const side = [...(related.get(id) ?? [])].filter((other) => !up?.has(other))
+      if (up?.size) entry.within = [...up]
+      if (side.length > 0) entry.related = side
+      const cast = [...(near.get(id) ?? [])].filter((other) => !up?.has(other) && !side.includes(other))
+      if (cast.length > 0) entry.near = cast
       yield entry
     }
     let top = 0
@@ -342,7 +402,7 @@ const source: Source = {
     }
     for await (const character of records<Character>(join(raw, CHARACTERS))) {
       const found = casts.get(character.id)
-      if (character.role === 1 && found) yield characterOf(character, found, works, top)
+      if (ROLES.has(character.role) && found) yield characterOf(character, found, works, top)
     }
   },
 }

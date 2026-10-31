@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { swapLayout, TOP, typing, weightOf } from './match.ts'
-import type { Kind, Layer, NameKind } from './model.ts'
+import { type Kind, LAYERS, type Layer, type NameKind, SPINE } from './model.ts'
 import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from './text.ts'
 
 export interface Hit {
@@ -43,16 +43,16 @@ export class Index {
   private schemas: string[]
   private ranks = new Map<string, number>()
 
-  constructor(dir: string, layers: Layer[] = ['core', 'kowiki', 'unlicensed']) {
-    const core = join(dir, 'core.sqlite')
-    if (!existsSync(core)) {
-      throw new Error(`aninames: ${core} is missing; run mise run build`)
+  constructor(dir: string, layers: Layer[] = [...LAYERS]) {
+    const spine = join(dir, `${SPINE}.sqlite`)
+    if (!existsSync(spine)) {
+      throw new Error(`aninames: ${spine} is missing; run mise run build`)
     }
-    this.db = new Database(core)
+    this.db = new Database(spine)
     this.schemas = ['main']
-    this.layers = ['core']
+    this.layers = [SPINE]
     for (const layer of layers) {
-      if (layer === 'core') continue
+      if (layer === SPINE) continue
       const path = join(dir, `${layer}.sqlite`)
       if (!existsSync(path)) continue
       this.db.run(`ATTACH DATABASE '${path.replaceAll("'", "''")}' AS ${layer}`)

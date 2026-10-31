@@ -3,7 +3,12 @@ import type { Kind } from './model.ts'
 export class Union {
   private parent = new Map<string, string>()
   private items = new Map<string, string>()
+  private readonly anchor: (key: string) => boolean
   refused = 0
+
+  constructor(anchor: (key: string) => boolean = () => false) {
+    this.anchor = anchor
+  }
 
   has(key: string): boolean {
     return this.parent.has(key)
@@ -12,11 +17,15 @@ export class Union {
   add(key: string): void {
     if (this.parent.has(key)) return
     this.parent.set(key, key)
-    if (key.includes('|wikidata:')) this.items.set(key, key)
+    if (this.anchor(key)) this.items.set(key, key)
   }
 
   anchored(key: string): boolean {
     return this.items.has(this.find(key))
+  }
+
+  anchorOf(key: string): string | undefined {
+    return this.parent.has(key) ? this.items.get(this.find(key)) : undefined
   }
 
   find(key: string): string {
@@ -54,4 +63,8 @@ export class Union {
 
 export function node(kind: Kind, ref: string): string {
   return `${kind}|${ref}`
+}
+
+export function refOf(key: string): string {
+  return key.slice(key.indexOf('|') + 1)
 }

@@ -123,38 +123,13 @@ const LABEL_LANGS = [
 
 type Group = Kind | 'linked'
 
-type Facet =
-  | 'ids'
-  | 'label'
-  | 'alias'
-  | 'sitelinks'
-  | 'date'
-  | 'origin'
-  | 'kana'
-  | 'native'
-  | 'works'
-  | 'series'
-  | 'related'
+type Facet = 'ids' | 'label' | 'alias' | 'sitelinks' | 'date' | 'origin' | 'kana' | 'native' | 'works'
 
 interface Query {
   file: string
   group: Group
   facet: Facet
   pattern: string
-  property?: string
-}
-
-type Tie = 'within' | 'basis' | 'related'
-
-const RELATIONS: Record<string, { tie: Tie; inverse?: true }> = {
-  P179: { tie: 'within' },
-  P361: { tie: 'within' },
-  P8345: { tie: 'within' },
-  P527: { tie: 'within', inverse: true },
-  P144: { tie: 'basis' },
-  P4969: { tie: 'basis', inverse: true },
-  P155: { tie: 'related' },
-  P156: { tie: 'related' },
 }
 
 function idPattern(ids: Id[]): string {
@@ -190,7 +165,6 @@ const QUERIES: Query[] = [
   { file: 'character-kana', group: 'character', facet: 'kana', pattern: '?item wdt:P1814 ?v' },
   { file: 'character-native', group: 'character', facet: 'native', pattern: '?item wdt:P1559 ?v' },
   { file: 'character-works', group: 'character', facet: 'works', pattern: '?item wdt:P1441 ?v' },
-  { file: 'character-series', group: 'character', facet: 'series', pattern: '?item wdt:P8345 ?v' },
   { file: 'linked-ids', group: 'linked', facet: 'ids', pattern: idPattern(IDS.work) },
   { file: 'linked-labels', group: 'linked', facet: 'label', pattern: names('rdfs:label') },
   { file: 'linked-aliases', group: 'linked', facet: 'alias', pattern: names('skos:altLabel') },
@@ -198,15 +172,6 @@ const QUERIES: Query[] = [
   { file: 'linked-published', group: 'linked', facet: 'date', pattern: '?item wdt:P577 ?v' },
   { file: 'linked-started', group: 'linked', facet: 'date', pattern: '?item wdt:P580 ?v' },
   { file: 'linked-origin', group: 'linked', facet: 'origin', pattern: ORIGIN },
-  ...(['work', 'linked'] as const).flatMap((group) =>
-    Object.keys(RELATIONS).map((property) => ({
-      file: `${group}-related-${property}`,
-      group,
-      facet: 'related' as const,
-      pattern: `?item wdt:${property} ?v`,
-      property,
-    })),
-  ),
 ]
 
 function kindOf(group: Group): Kind {
@@ -379,16 +344,10 @@ interface Item {
   aliases: Name[]
   readings: Name[]
   works: Ref[]
-  series: Ref[]
-  within: Ref[]
-  basis: Ref[]
-  related: Ref[]
   origin: string[]
   rank?: number
   year?: number
 }
-
-type Inverse = [item: string, tie: Tie, from: Ref][]
 
 function named(term: Term, kind: Name['kind']): Name | undefined {
   const code = (term['xml:lang'] ?? '').toLowerCase()
@@ -400,7 +359,7 @@ function named(term: Term, kind: Name['kind']): Name | undefined {
   return lang ? { text, lang, kind } : { text, kind }
 }
 
-function gather(items: Map<string, Item>, query: Query, rows: Record<string, Term>[], inverse: Inverse): void {
+function gather(items: Map<string, Item>, query: Query, rows: Record<string, Term>[]): void {
   const ids = IDS[kindOf(query.group)]
   for (const row of rows) {
     const q = qid(row.item)
@@ -417,10 +376,6 @@ function gather(items: Map<string, Item>, query: Query, rows: Record<string, Ter
         aliases: [],
         readings: [],
         works: [],
-        series: [],
-        within: [],
-        basis: [],
-        related: [],
         origin: [],
       }
       items.set(q, item)
@@ -471,19 +426,6 @@ function gather(items: Map<string, Item>, query: Query, rows: Record<string, Ter
         if (work) item.works.push(ref('wikidata', work))
         break
       }
-      case 'series': {
-        const work = qid(value)
-        if (work) item.series.push(ref('wikidata', work))
-        break
-      }
-      case 'related': {
-        const other = qid(value)
-        const relation = RELATIONS[query.property ?? '']
-        if (!other || other === q || !relation) break
-        if (relation.inverse) inverse.push([other, relation.tie, ref('wikidata', q)])
-        else item[relation.tie].push(ref('wikidata', other))
-        break
-      }
     }
   }
 }
@@ -514,18 +456,12 @@ function namesOf(item: Item): Name[] {
   return out
 }
 
-function entryOf(q: string, kind: Kind, item: Item, known?: Map<string, Item>): Entry {
+function entryOf(q: string, kind: Kind, item: Item): Entry {
   const entry: Entry = { id: ref('wikidata', q), kind, names: namesOf(item) }
   const refs = unique(item.refs)
   if (refs.length > 0) entry.refs = refs
   const works = unique(item.works)
   if (works.length > 0) entry.works = works
-  const series = unique(item.series)
-  if (series.length > 0) entry.series = series
-  for (const tie of ['within', 'basis', 'related'] as const) {
-    const found = unique(item[tie]).filter((other) => known?.has(other.slice('wikidata:'.length)))
-    if (found.length > 0) entry[tie] = found
-  }
   if (item.rank !== undefined) entry.rank = item.rank
   if (item.year !== undefined) entry.year = item.year
   const origin = unique(item.origin)
@@ -535,17 +471,13 @@ function entryOf(q: string, kind: Kind, item: Item, known?: Map<string, Item>): 
 
 async function* stage(raw: string): AsyncIterable<Entry> {
   const items: Record<Kind, Map<string, Item>> = { work: new Map(), character: new Map() }
-  const inverse: Inverse = []
-  for (const query of QUERIES) {
-    gather(items[kindOf(query.group)], query, await rowsOf(raw, query.file), inverse)
-  }
-  for (const [q, tie, from] of inverse) items.work.get(q)?.[tie].push(from)
+  for (const query of QUERIES) gather(items[kindOf(query.group)], query, await rowsOf(raw, query.file))
   for (const [q, item] of items.character) {
     yield entryOf(q, 'character', item)
   }
   for (const [q, item] of items.work) {
     if (!items.character.has(q)) {
-      yield entryOf(q, 'work', item, items.work)
+      yield entryOf(q, 'work', item)
     }
   }
 }
