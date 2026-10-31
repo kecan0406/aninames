@@ -8,7 +8,7 @@ export const KEY_TABLES = ['flat', 'latin', 'sound', 'part', 'initial'] as const
 
 export type KeyTable = (typeof KEY_TABLES)[number]
 
-export const TABLES = [...KEY_TABLES, 'tag', 'entity'] as const
+export const TABLES = [...KEY_TABLES, 'tag', 'home', 'entity'] as const
 
 export type Table = (typeof TABLES)[number]
 
@@ -28,6 +28,7 @@ export const TRUSTED: readonly string[] = ['wikidata', 'aod', 'anidb', 'vndb']
 export const CHARACTER = 1
 export const MAIN = 2
 export const ADULT = 4
+export const SHADOWED = 64
 
 export function present(layer: Layer): number {
   return 8 << LAYERS.indexOf(layer)
@@ -90,6 +91,7 @@ export interface EntitySpans extends Spans {
 export interface LayerSpans {
   keys: Record<KeyTable, Spans>
   tag: Spans | undefined
+  home: Spans | undefined
   entity: EntitySpans
 }
 
@@ -166,7 +168,8 @@ export function readManifest(text: string): Manifest {
     const keys = {} as Record<KeyTable, Spans>
     for (const table of KEY_TABLES) keys[table] = spansOf(tables[table], `${layer}/${table}`)
     const tag = tables.tag === undefined ? undefined : spansOf(tables.tag, `${layer}/tag`)
-    layers.set(layer, { keys, tag, entity: unpack(tables.entity, `${layer}/entity`, true) })
+    const home = tables.home === undefined ? undefined : spansOf(tables.home, `${layer}/home`)
+    layers.set(layer, { keys, tag, home, entity: unpack(tables.entity, `${layer}/entity`, true) })
   }
   if (!layers.has('core')) throw bad('it has no core layer')
   return { built, layers }
@@ -177,6 +180,7 @@ export function manifestPaths(manifest: Manifest): Set<string> {
   for (const [layer, spans] of manifest.layers) {
     for (const table of KEY_TABLES) for (const hash of spans.keys[table].files) paths.add(chunkPath(layer, table, hash))
     for (const hash of spans.tag?.files ?? []) paths.add(chunkPath(layer, 'tag', hash))
+    for (const hash of spans.home?.files ?? []) paths.add(chunkPath(layer, 'home', hash))
     for (const hash of spans.entity.files) paths.add(chunkPath(layer, 'entity', hash))
   }
   return paths
@@ -214,6 +218,7 @@ export interface EntityRow {
   extra: number
   adult: boolean
   refs: string[]
+  home: string | null
 }
 
 const isInt = (value: unknown): value is number => Number.isSafeInteger(value)
@@ -262,7 +267,8 @@ const refOf = (value: unknown): string | undefined =>
 
 function entityRow(value: unknown): EntityRow | undefined {
   if (!Array.isArray(value) || value.length < 10) return undefined
-  const [eid, id, rawNames, rawTags, rawWorks, rawReach, rank, standing, extra, adult, rawRefs = []] = value
+  const [eid, id, rawNames, rawTags, rawWorks, rawReach, rank, standing, extra, adult, rawRefs = [], home = null] =
+    value
   if (!isCount(eid) || typeof id !== 'string') return undefined
   const kind: Kind | undefined = id.startsWith('w/') ? 'work' : id.startsWith('c/') ? 'character' : undefined
   if (!kind || !isInt(rank) || !isInt(standing) || !isInt(extra)) return undefined
@@ -271,8 +277,8 @@ function entityRow(value: unknown): EntityRow | undefined {
   const works = list(rawWorks, workOf)
   const reach = list(rawReach, eidOf)
   const refs = list(rawRefs, refOf)
-  if (!names || !danbooru || !works || !reach || !refs) return undefined
-  return { eid, id, kind, names, danbooru, works, reach, rank, standing, extra, adult: adult === 1, refs }
+  if (!names || !danbooru || !works || !reach || !refs || (home !== null && typeof home !== 'string')) return undefined
+  return { eid, id, kind, names, danbooru, works, reach, rank, standing, extra, adult: adult === 1, refs, home }
 }
 
 export function readRows(table: Table, value: unknown): KeyRow[] | EntityRow[] | undefined {

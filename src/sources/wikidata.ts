@@ -48,6 +48,14 @@ function vndb(letter: string): (value: string) => Ref | undefined {
   return (value) => (new RegExp(`^${letter}[1-9]\\d*$`).test(value) ? ref('vndb', value) : undefined)
 }
 
+function danbooru(value: string): Ref | undefined {
+  return value.trim() ? ref('danbooru', value.trim()) : undefined
+}
+
+function igdb(value: string): Ref | undefined {
+  return /^[a-z0-9]+(?:-+[a-z0-9]+)*$/.test(value) ? ref('igdb', value) : undefined
+}
+
 const IDS: Record<Kind, Id[]> = {
   work: [
     { property: 'P4086', to: numeric('mal') },
@@ -61,6 +69,9 @@ const IDS: Record<Kind, Id[]> = {
     { property: 'P3180', only: 'v', to: vndb('v') },
     { property: 'P4983', finds: false, to: numeric('tmdb', 'tv/') },
     { property: 'P4947', finds: false, to: numeric('tmdb', 'movie/') },
+    { property: 'P13236', finds: false, to: danbooru },
+    { property: 'P5794', finds: false, to: igdb },
+    { property: 'P1733', finds: false, to: numeric('steam') },
   ],
   character: [
     { property: 'P4085', to: numeric('mal') },
@@ -68,11 +79,7 @@ const IDS: Record<Kind, Id[]> = {
     { property: 'P5648', to: numeric('anidb') },
     { property: 'P6296', to: numeric('bangumi') },
     { property: 'P3180', only: 'c', to: vndb('c') },
-    {
-      property: 'P13236',
-      gate: 'wdt:P31/wdt:P279* wd:Q95074',
-      to: (value) => (value.trim() ? ref('danbooru', value.trim()) : undefined),
-    },
+    { property: 'P13236', gate: 'wdt:P31/wdt:P279* wd:Q95074', to: danbooru },
   ],
 }
 
@@ -116,7 +123,7 @@ const LABEL_LANGS = [
 
 type Group = Kind | 'linked'
 
-type Facet = 'ids' | 'label' | 'alias' | 'sitelinks' | 'date' | 'kana' | 'native' | 'works' | 'related'
+type Facet = 'ids' | 'label' | 'alias' | 'sitelinks' | 'date' | 'kana' | 'native' | 'works' | 'series' | 'related'
 
 interface Query {
   file: string
@@ -157,6 +164,8 @@ const QUERIES: Query[] = [
   { file: 'character-kana', group: 'character', facet: 'kana', pattern: '?item wdt:P1814 ?v' },
   { file: 'character-native', group: 'character', facet: 'native', pattern: '?item wdt:P1559 ?v' },
   { file: 'character-works', group: 'character', facet: 'works', pattern: '?item wdt:P1441 ?v' },
+  { file: 'character-series', group: 'character', facet: 'series', pattern: '?item wdt:P8345 ?v' },
+  { file: 'linked-ids', group: 'linked', facet: 'ids', pattern: idPattern(IDS.work) },
   { file: 'linked-labels', group: 'linked', facet: 'label', pattern: names('rdfs:label') },
   { file: 'linked-aliases', group: 'linked', facet: 'alias', pattern: names('skos:altLabel') },
   { file: 'linked-sitelinks', group: 'linked', facet: 'sitelinks', pattern: SITELINKS },
@@ -335,6 +344,7 @@ interface Item {
   aliases: Name[]
   readings: Name[]
   works: Ref[]
+  series: Ref[]
   related: Ref[]
   rank?: number
   year?: number
@@ -360,7 +370,7 @@ function gather(items: Map<string, Item>, query: Query, rows: Record<string, Ter
     }
     let item = items.get(q)
     if (!item) {
-      item = { refs: [], labels: [], native: [], aliases: [], readings: [], works: [], related: [] }
+      item = { refs: [], labels: [], native: [], aliases: [], readings: [], works: [], series: [], related: [] }
       items.set(q, item)
     }
     switch (query.facet) {
@@ -404,6 +414,11 @@ function gather(items: Map<string, Item>, query: Query, rows: Record<string, Ter
         if (work) item.works.push(ref('wikidata', work))
         break
       }
+      case 'series': {
+        const work = qid(value)
+        if (work) item.series.push(ref('wikidata', work))
+        break
+      }
       case 'related': {
         const other = qid(value)
         if (other && other !== q) item.related.push(ref('wikidata', other))
@@ -445,6 +460,8 @@ function entryOf(q: string, kind: Kind, item: Item, known?: Map<string, Item>): 
   if (refs.length > 0) entry.refs = refs
   const works = unique(item.works)
   if (works.length > 0) entry.works = works
+  const series = unique(item.series)
+  if (series.length > 0) entry.series = series
   const related = unique(item.related).filter((other) => known?.has(other.slice('wikidata:'.length)))
   if (related.length > 0) entry.related = related
   if (item.rank !== undefined) entry.rank = item.rank

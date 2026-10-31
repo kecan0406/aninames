@@ -21,6 +21,8 @@ const COPYRIGHT = 3
 
 const MIN_WORK_POSTS = 100
 
+const META = new Set(['original'])
+
 const PAGE = 1000
 
 const PACE = 1000
@@ -322,16 +324,24 @@ export default {
     }
     const titles = new Map(Object.entries(await read<Record<string, string[]>>(raw, 'titles')))
     for (const tag of await read<Tag[]>(raw, 'works')) {
-      if (tag.is_deprecated) continue
+      if (tag.is_deprecated || META.has(tag.name)) continue
       const others = (titles.get(tag.name) ?? []).map(display).filter(usable)
       const link = others.filter((text) => hasKana(text) || hasKanji(text))
-      if (link.length === 0) continue
       const names: Name[] = [{ text: display(tag.name), kind: 'main' }]
       for (const text of others) {
         const lang = langOf(text)
         names.push(lang ? { text, lang, kind: 'synonym' } : { text, kind: 'synonym' })
       }
-      yield { id: ref('danbooru', tag.name), kind: 'work', attach: true, link, names, rank: tag.post_count }
+      const entry: Entry = {
+        id: ref('danbooru', tag.name),
+        kind: 'work',
+        attach: true,
+        family: true,
+        names,
+        rank: tag.post_count,
+      }
+      if (link.length > 0) entry.link = link
+      yield entry
     }
   },
 } satisfies Source

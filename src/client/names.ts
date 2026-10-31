@@ -13,6 +13,7 @@ import {
   parsePath,
   readManifest,
   readRows,
+  SHADOWED,
 } from './format.ts'
 import { Missing, type Source } from './source.ts'
 
@@ -24,6 +25,7 @@ export interface Found {
   danbooru: string[]
   works: string[]
   refs: string[]
+  home: string | null
   score: number
   adult: boolean
 }
@@ -110,7 +112,8 @@ function card(rows: EntityRow[], score: number, adult: boolean): Found {
     .map((entry) => entry.tag)
   const works = head.kind === 'character' ? [...new Set(rows.flatMap((row) => row.works.map(([, id]) => id)))] : []
   const refs = [...new Set(rows.flatMap((row) => row.refs))].sort()
-  return { id: head.id, kind: head.kind, label: label(head.id, rows), names, danbooru, works, refs, score, adult }
+  const home = rows.findLast((row) => row.home !== null)?.home ?? null
+  return { id: head.id, kind: head.kind, label: label(head.id, rows), names, danbooru, works, refs, home, score, adult }
 }
 
 interface State {
@@ -167,20 +170,39 @@ export class Names {
     tag: string,
     options: { kind?: Kind; adult?: boolean; prefix?: boolean; signal?: AbortSignal } = {},
   ): Promise<Found[]> {
-    const { kind, adult = true, prefix = false, signal } = options
+    return this.#tagged('tag', tag, options)
+  }
+
+  cast(
+    tag: string,
+    options: { adult?: boolean; prefix?: boolean; limit?: number; signal?: AbortSignal } = {},
+  ): Promise<Found[]> {
+    return this.#tagged('home', tag, options)
+  }
+
+  #tagged(
+    table: 'tag' | 'home',
+    tag: string,
+    options: { kind?: Kind; adult?: boolean; prefix?: boolean; limit?: number; signal?: AbortSignal },
+  ): Promise<Found[]> {
+    const { kind, adult = true, prefix = false, limit = Number.POSITIVE_INFINITY, signal } = options
     const key = flat(qualifiers(tag).base)
     return this.#run(signal, (view) => {
       if (!key) return []
+      const covered = view.layers.includes('unlicensed')
       const best = new Map<number, { posts: number; mask: number; flags: number; standing: number }>()
-      for (const [, eid, posts, flags, , standing] of view.tagged(key, prefix)) {
+      for (const [, eid, posts, flags, , standing] of view.tagged(key, prefix, table)) {
         if (kind && (flags & CHARACTER ? 'character' : 'work') !== kind) continue
         if (!adult && flags & ADULT) continue
+        if (covered && flags & SHADOWED) continue
         const known = best.get(eid)
-        const mask = flags & ~(CHARACTER | MAIN | ADULT)
+        const mask = flags & ~(CHARACTER | MAIN | ADULT | SHADOWED)
         if (!known || posts > known.posts) best.set(eid, { posts, mask: mask | (known?.mask ?? 0), flags, standing })
         else known.mask |= mask
       }
-      const order = [...best].sort(([a, x], [b, y]) => y.posts - x.posts || y.standing - x.standing || a - b)
+      const order = [...best]
+        .sort(([a, x], [b, y]) => y.posts - x.posts || y.standing - x.standing || a - b)
+        .slice(0, limit)
       view.labels = true
       const out = order.flatMap(([eid, hit]) => {
         const rows = view.entity(eid, hit.mask)

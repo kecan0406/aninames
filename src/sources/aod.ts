@@ -24,6 +24,8 @@ const PATTERNS: readonly [Namespace, RegExp][] = [
 
 const STRONGEST: readonly Namespace[] = ['mal', 'anidb', 'anilist', 'kitsu']
 
+const NEAR: readonly Namespace[] = [...STRONGEST, 'ann']
+
 interface Release {
   tag_name: string
   assets: { name: string; browser_download_url: string }[]
@@ -34,6 +36,7 @@ interface Anime {
   title: string
   type: string
   synonyms: string[]
+  relatedAnime?: string[]
   animeSeason?: { year?: number }
   score?: { arithmeticMean: number }
   tags?: string[]
@@ -87,6 +90,11 @@ function entryOf(anime: Anime): Entry | undefined {
     names: namesOf(anime),
     type: anime.type,
   }
+  const own = new Set(refs)
+  const near = [...new Set((anime.relatedAnime ?? []).map(refOf))].filter(
+    (found): found is Ref => found !== undefined && !own.has(found) && NEAR.some((ns) => found.startsWith(`${ns}:`)),
+  )
+  if (near.length > 0) entry.near = near
   const year = anime.animeSeason?.year
   if (year) entry.year = year
   if (anime.tags?.includes('hentai')) entry.adult = true

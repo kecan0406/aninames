@@ -14,6 +14,7 @@ import {
   type Packed,
   pack,
   present,
+  SHADOWED,
   shared,
   TABLES,
   type Table,
@@ -84,7 +85,8 @@ export class Writer {
 
 type Numbering = Map<string, number>
 
-const IDS = 'SELECT entity AS id FROM names UNION SELECT id FROM entities UNION SELECT entity FROM refs'
+const IDS =
+  'SELECT entity AS id FROM names UNION SELECT id FROM entities UNION SELECT entity FROM refs UNION SELECT entity FROM homes'
 
 function numbering(dbs: Map<Layer, Database>): { eid: Numbering; masks: Uint8Array } {
   const seen = new Map<string, number>()
@@ -279,24 +281,32 @@ function keyTable(db: Database, layer: Layer, table: KeyTable, context: Context)
   return writer
 }
 
-const TAG_SQL = `SELECT entity, substr(ref, 10) AS tag, max(rank) AS posts FROM refs
-WHERE ref GLOB 'danbooru:*' GROUP BY entity, ref`
+const TAG_SQL: Record<'tag' | 'home', string> = {
+  tag: `SELECT entity, substr(ref, 10) AS tag, max(rank) AS posts FROM refs
+WHERE ref GLOB 'danbooru:*' GROUP BY entity, ref`,
+  home: 'SELECT entity, tag, posts, shadowed FROM homes',
+}
 
-function tagTable(db: Database, layer: Layer, context: Context): Writer {
+function tagTable(db: Database, layer: Layer, table: 'tag' | 'home', context: Context): Writer {
   const { eid, masks, score } = context
-  const writer = new Writer(join(context.out, layer, 'tag'), context.target)
-  const rows: [key: string, at: number, posts: number, character: boolean][] = []
-  for (const row of db.query<{ entity: string; tag: string; posts: number | null }, []>(TAG_SQL).iterate()) {
+  const writer = new Writer(join(context.out, layer, table), context.target)
+  const rows: [key: string, at: number, posts: number, character: boolean, shadowed: boolean][] = []
+  for (const row of db
+    .query<{ entity: string; tag: string; posts: number | null; shadowed?: number }, []>(TAG_SQL[table])
+    .iterate()) {
     const at = eid.get(row.entity)
     const key = flat(qualifiers(row.tag).base)
-    if (at !== undefined && key) rows.push([key, at, Math.round(row.posts ?? 0), row.entity.startsWith('c/')])
+    if (at !== undefined && key) {
+      rows.push([key, at, Math.round(row.posts ?? 0), row.entity.startsWith('c/'), row.shadowed === 1])
+    }
   }
   rows.sort((a, b) => compare(a[0], b[0]) || a[1] - b[1] || b[2] - a[2])
   let last: [string, number] | undefined
-  for (const [key, at, posts, character] of rows) {
+  for (const [key, at, posts, character, shadowed] of rows) {
     if (last && last[0] === key && last[1] === at) continue
     last = [key, at]
-    const flags = (character ? CHARACTER : 0) | (score.adult[at] ? ADULT : 0) | (masks[at] ?? 0)
+    const flags =
+      (character ? CHARACTER : 0) | (score.adult[at] ? ADULT : 0) | (shadowed ? SHADOWED : 0) | (masks[at] ?? 0)
     writer.add([key, at, posts, flags, score.rank[at], score.standing[at], score.extra[at]], key)
   }
   writer.flush()
@@ -312,7 +322,8 @@ SELECT id,
   (SELECT json_group_array(work) FROM
     (SELECT work FROM works WHERE character = ids.id GROUP BY work ORDER BY min(rowid))) AS works,
   (SELECT json_group_array(ref) FROM
-    (SELECT ref FROM refs WHERE entity = ids.id AND ref NOT GLOB 'danbooru:*' GROUP BY ref ORDER BY ref)) AS refs
+    (SELECT ref FROM refs WHERE entity = ids.id AND ref NOT GLOB 'danbooru:*' GROUP BY ref ORDER BY ref)) AS refs,
+  (SELECT tag FROM homes WHERE entity = ids.id) AS home
 FROM ids ORDER BY id`
 
 type NameSource = [text: string, lang: string | null, kind: NameKind, source: string, qual: string | null]
@@ -323,7 +334,9 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
   const links = score.related.get(layer) ?? new Map<number, number[]>()
   const order = (at: number) => 25 * (score.standing[at] ?? 0) + 1000 * (score.extra[at] ?? 0)
   for (const row of db
-    .query<{ id: string; names: string; tags: string; works: string; refs: string }, []>(ENTITY_SQL)
+    .query<{ id: string; names: string; tags: string; works: string; refs: string; home: string | null }, []>(
+      ENTITY_SQL,
+    )
     .iterate()) {
     const at = eid.get(row.id)
     if (at === undefined) continue
@@ -356,6 +369,7 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
         score.extra[at],
         score.adult[at],
         JSON.parse(row.refs) as string[],
+        row.home,
       ],
       row.id,
       at,
@@ -416,8 +430,8 @@ export async function chunk(dir: string, target = 32_768): Promise<void> {
       const writer =
         table === 'entity'
           ? entityTable(db, layer, context)
-          : table === 'tag'
-            ? tagTable(db, layer, context)
+          : table === 'tag' || table === 'home'
+            ? tagTable(db, layer, table, context)
             : keyTable(db, layer, table, context)
       tables[table] = writer.packed(table === 'entity')
       files += writer.hashes.length

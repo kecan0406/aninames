@@ -21,6 +21,8 @@ export type Namespace =
   | 'simkl'
   | 'animecountdown'
   | 'tmdb'
+  | 'igdb'
+  | 'steam'
   | 'vndb'
   | 'bangumi'
   | 'danbooru'
@@ -39,10 +41,13 @@ export interface Entry {
   id: Ref
   kind?: Kind
   attach?: boolean
+  family?: boolean
   refs?: Ref[]
   names: Name[]
   works?: Ref[]
+  series?: Ref[]
   related?: Ref[]
+  near?: Ref[]
   link?: string[]
   rank?: number
   adult?: boolean

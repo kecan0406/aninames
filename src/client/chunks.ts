@@ -70,12 +70,12 @@ export class View {
     )
   }
 
-  tagged(key: string, prefix: boolean): KeyRow[] {
+  tagged(key: string, prefix: boolean, table: 'tag' | 'home' = 'tag'): KeyRow[] {
     const range = { low: key, high: prefix ? `${key}\u{10FFFF}` : key }
-    return this.layers.flatMap((layer) => this.keysIn(layer, 'tag', this.manifest.layers.get(layer)?.tag, range))
+    return this.layers.flatMap((layer) => this.keysIn(layer, table, this.manifest.layers.get(layer)?.[table], range))
   }
 
-  private keysIn(layer: Layer, table: KeyTable | 'tag', spans: Spans | undefined, range: Range): KeyRow[] {
+  private keysIn(layer: Layer, table: KeyTable | 'tag' | 'home', spans: Spans | undefined, range: Range): KeyRow[] {
     if (!spans) return []
     const { low, high, open = false, limit = Number.POSITIVE_INFINITY, spans: most = Number.POSITIVE_INFINITY } = range
     const start = Math.max(

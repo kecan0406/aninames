@@ -44,6 +44,8 @@ const STRENGTH: Namespace[] = [
   'simkl',
   'animecountdown',
   'tmdb',
+  'igdb',
+  'steam',
   'kowiki',
   'anissia',
 ]
@@ -469,10 +471,86 @@ function resolveEntities(staged: Staged[]): { union: Union; entities: Map<string
   return { union, entities }
 }
 
+const HUB = 200
+
+export function groupsOf(nodes: readonly string[], tied: (a: string, b: string) => boolean): string[][] {
+  const parent = new Map(nodes.map((at) => [at, at]))
+  const find = (at: string): string => {
+    let root = at
+    for (let next = parent.get(root); next !== undefined && next !== root; next = parent.get(root)) root = next
+    return root
+  }
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i] as string
+      const b = nodes[j] as string
+      const ra = find(a)
+      const rb = find(b)
+      if (ra !== rb && tied(a, b)) parent.set(rb, ra)
+    }
+  }
+  const groups = new Map<string, string[]>()
+  for (const at of nodes) {
+    const root = find(at)
+    const group = groups.get(root)
+    if (group) group.push(at)
+    else groups.set(root, [at])
+  }
+  return [...groups.values()]
+}
+
+export function familyOf(groups: readonly string[][], anchors: ReadonlySet<string>): string[] {
+  const anchored = groups.filter((group) => group.some((at) => anchors.has(at)))
+  if (anchored.length > 0) return anchored.flat()
+  const largest = [...groups].sort((a, b) => b.length - a.length)[0] ?? []
+  if (groups.length <= 1) return largest
+  const total = groups.reduce((sum, group) => sum + group.length, 0)
+  return largest.length >= 2 && largest.length * 3 >= total * 2 ? largest : []
+}
+
+function firstYear(entity: Entity): number {
+  let first = Number.POSITIVE_INFINITY
+  for (const m of entity.members) if (!m.entry.attach && m.entry.year) first = Math.min(first, m.entry.year)
+  return first
+}
+
+function meets(a: ReadonlySet<string> | undefined, b: ReadonlySet<string> | undefined, keep = (_: string) => true) {
+  if (!a || !b) return false
+  const [small, large] = a.size < b.size ? [a, b] : [b, a]
+  for (const at of small) if (large.has(at) && keep(at)) return true
+  return false
+}
+
+function linksOf(union: Union, entities: Map<string, Entity>): Map<string, Set<string>> {
+  const links = new Map<string, Set<string>>()
+  const tie = (a: string, b: string) => {
+    for (const [from, to] of [
+      [a, b],
+      [b, a],
+    ] as const) {
+      const set = links.get(from) ?? new Set<string>()
+      set.add(to)
+      links.set(from, set)
+    }
+  }
+  for (const [root, entity] of entities) {
+    if (entity.kind !== 'work') continue
+    for (const m of entity.members) {
+      for (const other of [...(m.entry.related ?? []), ...(m.entry.near ?? [])]) {
+        const key = node('work', other)
+        const there = union.has(key) ? union.find(key) : undefined
+        if (there && there !== root) tie(root, there)
+      }
+    }
+  }
+  return links
+}
+
 function attachEntries(
   union: Union,
   staged: Staged[],
   entities: Map<string, Entity>,
+  links: ReadonlyMap<string, ReadonlySet<string>>,
 ): { attached: number; missed: number } {
   const workNames = new Map<string, Set<string>>()
   for (const [root, entity] of entities) {
@@ -494,6 +572,8 @@ function attachEntries(
   const characterNames = new Map<string, Set<string>>()
   const characterWorks = new Map<string, Set<string>>()
   const neighbours = new Map<string, Set<string>>()
+  const cast = new Map<string, Set<string>>()
+  const casts = new Map<string, Set<string>>()
   const remember = (map: Map<string, Set<string>>, key: string, value: string) => {
     const set = map.get(key) ?? new Set<string>()
     set.add(value)
@@ -518,6 +598,12 @@ function attachEntries(
       for (const work of m.entry.works ?? []) {
         const there = workRoot(work)
         if (there) remember(characterWorks, root, there)
+      }
+      for (const work of [...(m.entry.works ?? []), ...(m.entry.series ?? [])]) {
+        const there = workRoot(work)
+        if (!there) continue
+        remember(cast, there, root)
+        remember(casts, root, there)
       }
       for (const name of m.entry.names) {
         if (name.kind === 'reading' || !japanese(name.text)) continue
@@ -553,6 +639,24 @@ function attachEntries(
     const inCast = [...roots].filter((root) => [...(characterWorks.get(root) ?? [])].some((work) => context.has(work)))
     return inCast.length === 1 ? entities.get(inCast[0] ?? '') : undefined
   }
+  const small = (character: string) => (casts.get(character)?.size ?? 0) <= HUB
+  const tied = (a: string, b: string) =>
+    (links.get(a)?.has(b) ?? false) || meets(links.get(a), links.get(b)) || meets(cast.get(a), cast.get(b), small)
+  const familyFor = (entry: Entry): { targets: Entity[]; head: Entity | undefined } => {
+    const anchors = new Set<string>()
+    const own = workRoot(entry.id)
+    if (own && entities.has(own)) anchors.add(own)
+    const candidates = new Set(anchors)
+    for (const text of entry.link ?? []) for (const root of workNames.get(flat(text)) ?? []) candidates.add(root)
+    const chosen = familyOf(groupsOf([...candidates], tied), anchors)
+    const head =
+      chosen.find((root) => anchors.has(root)) ??
+      chosen.toSorted((a, b) => {
+        const [x, y] = [entities.get(a), entities.get(b)]
+        return (x && y ? firstYear(x) - firstYear(y) : 0) || (a < b ? -1 : a > b ? 1 : 0)
+      })[0]
+    return { targets: chosen.flatMap((root) => entities.get(root) ?? []), head: entities.get(head ?? '') }
+  }
   let attached = 0
   let missed = 0
   for (const s of staged) {
@@ -564,6 +668,14 @@ function attachEntries(
         found.members.push(s)
         attached++
       } else missed++
+      continue
+    }
+    if (entry.family) {
+      const { targets, head } = familyFor(entry)
+      const tag: Staged = { ...s, entry: { id: entry.id, kind: 'work', attach: true, names: [] }, popularity: 0 }
+      for (const found of targets) found.members.push(found === head ? s : tag)
+      if (targets.length > 0) attached++
+      else missed++
       continue
     }
     const kinds: Kind[] = entry.kind ? [entry.kind] : ['work', 'character']
@@ -592,6 +704,151 @@ function attachEntries(
     else missed++
   }
   return { attached, missed }
+}
+
+interface Home {
+  tag: string
+  posts: number | null
+}
+
+const TAG = 'danbooru:'
+
+function tagsOf(root: string, entity: Entity, union: Union, seen: (s: Staged) => boolean): Map<string, number | null> {
+  const tags = new Map<string, number | null>()
+  const add = (tag: string, posts: number | null) => {
+    const known = tags.get(tag)
+    if (!tags.has(tag) || (posts ?? -1) > (known ?? -1)) tags.set(tag, posts)
+  }
+  for (const m of entity.members) {
+    if (!seen(m)) continue
+    const { entry } = m
+    if (entry.id.startsWith(TAG) && (entry.attach || union.find(node(entity.kind, entry.id)) === root)) {
+      add(entry.id.slice(TAG.length), entry.rank ?? null)
+    }
+    for (const ref of entry.refs ?? []) {
+      if (ref.startsWith(TAG) && union.find(node(entity.kind, ref)) === root) add(ref.slice(TAG.length), null)
+    }
+  }
+  return tags
+}
+
+export function homeOf(
+  quals: readonly string[],
+  direct: ReadonlyMap<string, string>,
+  found: string | undefined,
+  learned: ReadonlyMap<string, string>,
+  fits: (tag: string) => boolean,
+): string | undefined {
+  const named = quals.map((qual) => direct.get(qual)).find(Boolean)
+  if (named) return named
+  if (found) return found
+  for (const qual of quals) {
+    const tag = learned.get(qual)
+    if (tag && fits(tag)) return tag
+  }
+  return undefined
+}
+
+export function votedOf(votes: ReadonlyMap<string, number>, posts: (tag: string) => number): string | undefined {
+  return [...votes].sort((a, b) => b[1] - a[1] || posts(b[0]) - posts(a[0]) || (a[0] < b[0] ? -1 : 1))[0]?.[0]
+}
+
+export function learnedOf(votes: ReadonlyMap<string, ReadonlyMap<string, number>>): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const [qual, tags] of votes) {
+    const total = [...tags.values()].reduce((sum, count) => sum + count, 0)
+    const [tag, count] = [...tags].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0] ?? ['', 0]
+    if (count >= 2 && count * 3 >= total * 2) out.set(qual, tag)
+  }
+  return out
+}
+
+function homesOf(
+  union: Union,
+  entities: Map<string, Entity>,
+  links: ReadonlyMap<string, ReadonlySet<string>>,
+  families: ReadonlyMap<string, number | null>,
+  seen: (s: Staged) => boolean,
+): Map<string, Home> {
+  const workRoot = (ref: string) => {
+    const key = node('work', ref)
+    return union.has(key) ? union.find(key) : undefined
+  }
+  const workTags = new Map<string, Map<string, number | null>>()
+  const posts = new Map<string, number | null>(families)
+  const more = (tag: string, count: number | null) => {
+    if (!posts.has(tag) || (count ?? -1) > (posts.get(tag) ?? -1)) posts.set(tag, count)
+  }
+  for (const [root, entity] of entities) {
+    if (entity.kind !== 'work') continue
+    const tags = tagsOf(root, entity, union, seen)
+    if (tags.size === 0) continue
+    workTags.set(root, tags)
+    for (const [tag, count] of tags) more(tag, count)
+  }
+  const postsOf = (tag: string) => posts.get(tag) ?? 0
+  const direct = new Map<string, string>()
+  for (const tag of [...posts.keys()].sort((a, b) => postsOf(b) - postsOf(a) || (a < b ? -1 : 1))) {
+    const { base, quals } = qualifiers(tag)
+    const key = flat(base)
+    if (!key || quals.some((qual) => qual !== 'series')) continue
+    const known = direct.get(key)
+    if (!known || (qualifiers(known).quals.length > 0 && quals.length === 0)) direct.set(key, tag)
+  }
+  const reached = (root: string) => {
+    const own = workTags.get(root)
+    if (own) return new Set(own.keys())
+    const out = new Set<string>()
+    for (const other of links.get(root) ?? []) for (const tag of workTags.get(other)?.keys() ?? []) out.add(tag)
+    return out
+  }
+  const chosen: { id: string; quals: string[]; voted: Set<string>; found: string | undefined; posts: number | null }[] =
+    []
+  const learning = new Map<string, Map<string, number>>()
+  for (const [root, entity] of entities) {
+    if (entity.kind !== 'character') continue
+    const own = [...tagsOf(root, entity, union, seen)].sort((a, b) => (b[1] ?? -1) - (a[1] ?? -1))
+    const quals = own.flatMap(([tag]) => {
+      const found = qualifiers(tag).quals
+      const key = found.length === 1 ? flat(found[0] ?? '') : ''
+      return key ? [key] : []
+    })
+    const series = new Set<string>()
+    const works = new Set<string>()
+    for (const m of entity.members) {
+      if (!seen(m)) continue
+      for (const ref of m.entry.series ?? []) {
+        const there = workRoot(ref)
+        if (there) series.add(there)
+      }
+      for (const ref of m.entry.works ?? []) {
+        const there = workRoot(ref)
+        if (there) works.add(there)
+      }
+    }
+    const tally = new Map<string, number>()
+    for (const work of works) for (const tag of reached(work)) tally.set(tag, (tally.get(tag) ?? 0) + 1)
+    const franchise = [...series]
+      .flatMap((there) => [...(workTags.get(there)?.keys() ?? [])])
+      .sort((a, b) => postsOf(b) - postsOf(a))[0]
+    const found = votedOf(tally, postsOf) ?? franchise
+    if (quals.length === 0 && !found) continue
+    const best = own.find(([, count]) => count !== null)?.[1] ?? null
+    chosen.push({ id: entity.id, quals, voted: new Set(tally.keys()), found, posts: best })
+    const qual = quals[0]
+    if (qual && found) {
+      const tags = learning.get(qual) ?? new Map<string, number>()
+      tags.set(found, (tags.get(found) ?? 0) + 1)
+      learning.set(qual, tags)
+    }
+  }
+  const learned = learnedOf(learning)
+  const homes = new Map<string, Home>()
+  for (const { id, quals, voted, found, posts: count } of chosen) {
+    const tag = homeOf(quals, direct, found, learned, (each) => voted.size === 0 || voted.has(each))
+    if (tag) homes.set(id, { tag, posts: count })
+  }
+  return homes
 }
 
 interface Row {
@@ -665,6 +922,7 @@ function mediaOf(staged: Staged): Medium[] {
     if (id.startsWith('manga/')) out.push('manga')
     else if (['mal', 'anilist', 'anidb', 'kitsu', 'ann'].includes(ns)) out.push('anime')
     else if (ns === 'vndb' && id.startsWith('v')) out.push('vn')
+    else if (ns === 'igdb' || ns === 'steam') out.push('game')
   }
   return out
 }
@@ -699,6 +957,7 @@ function schema(db: Database): void {
   db.run('CREATE TABLE related (work TEXT NOT NULL, other TEXT NOT NULL)')
   db.run('CREATE TABLE ranks (entity TEXT PRIMARY KEY, rank REAL NOT NULL, weight INTEGER NOT NULL)')
   db.run('CREATE TABLE adults (entity TEXT PRIMARY KEY)')
+  db.run('CREATE TABLE homes (entity TEXT PRIMARY KEY, tag TEXT NOT NULL, posts INTEGER, shadowed INTEGER NOT NULL)')
 }
 
 function indexes(db: Database): void {
@@ -729,8 +988,18 @@ export async function build(): Promise<void> {
   const { all: staged, sources } = await readAll()
   const { union, entities } = resolveEntities(staged)
   const titles = workTitles(union, staged)
-  const { attached, missed } = attachEntries(union, staged, entities)
+  const links = linksOf(union, entities)
+  const { attached, missed } = attachEntries(union, staged, entities, links)
   console.log(`build: ${entities.size} entities, ${attached} attach entries placed, ${missed} found no entity`)
+  const families = new Map<string, number | null>()
+  for (const s of staged) if (s.entry.family) families.set(s.entry.id.slice(TAG.length), s.entry.rank ?? null)
+  const homes: Partial<Record<Layer, Map<string, Home>>> = {
+    core: homesOf(union, entities, links, new Map(), (s) => s.layer === 'core'),
+    unlicensed: homesOf(union, entities, links, families, () => true),
+  }
+  console.log(
+    `build: ${homes.core?.size} characters have a home tag from core, ${homes.unlicensed?.size} from every layer`,
+  )
   const byRoot = new Map<string, string>()
   for (const [root, entity] of entities) byRoot.set(root, entity.id)
   const resolve = (kind: Kind, ref: string): string | undefined => {
@@ -761,6 +1030,7 @@ export async function build(): Promise<void> {
     const insertRelated = db.prepare('INSERT INTO related (work, other) VALUES (?, ?)')
     const insertRank = db.prepare('INSERT INTO ranks (entity, rank, weight) VALUES (?, ?, ?)')
     const insertAdult = db.prepare('INSERT INTO adults (entity) VALUES (?)')
+    const insertHome = db.prepare('INSERT INTO homes (entity, tag, posts, shadowed) VALUES (?, ?, ?, ?)')
     let nameCount = 0
     db.transaction(() => {
       for (const [root, entity] of entities) {
@@ -834,6 +1104,10 @@ export async function build(): Promise<void> {
           const key = initials(qualifiers(row.text).base)
           if ([...key].length >= 2) insertInitials.run(inserted.rowid, row.entity, key)
         }
+      }
+      for (const [id, home] of homes[layer] ?? []) {
+        const above = layer === 'core' ? homes.unlicensed?.get(id)?.tag : undefined
+        insertHome.run(id, home.tag, home.posts, above !== undefined && above !== home.tag ? 1 : 0)
       }
       const meta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)')
       meta.run('layer', layer)

@@ -3,7 +3,16 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { type Rows, View } from '../src/client/chunks.ts'
-import { CHARACTER, FORMAT, KEY_TABLES, type KeyRow, pack, present, readManifest } from '../src/client/format.ts'
+import {
+  CHARACTER,
+  FORMAT,
+  KEY_TABLES,
+  type KeyRow,
+  pack,
+  present,
+  readManifest,
+  SHADOWED,
+} from '../src/client/format.ts'
 import { decode, Names } from '../src/client/names.ts'
 import { compare } from '../src/client/order.ts'
 import { fileSource } from '../src/client/source.ts'
@@ -125,6 +134,62 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
     expect(await names.tagged('pip', { kind: 'work' })).toEqual([])
     expect(await names.tagged('starfall')).toEqual([])
     expect((await names.tagged('starfall', { prefix: true })).map((found) => found.id)).toEqual(['w/x:2', 'w/x:0'])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('cast lists the characters at home in a tag, and a home a higher layer names shadows the one below', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
+  try {
+    const both = present('core') | present('unlicensed')
+    const write = (layer: 'core' | 'unlicensed', homes: unknown[][], rows: unknown[][]) => {
+      const home = new Writer(join(dir, layer, 'home'), 4096)
+      for (const row of homes) home.add(row, row[0] as string)
+      home.flush()
+      const entity = new Writer(join(dir, layer, 'entity'), 4096)
+      for (const row of rows) entity.add(row, row[1] as string, row[0] as number)
+      entity.flush()
+      const empty = pack([], [])
+      const keys = Object.fromEntries(KEY_TABLES.map((table) => [table, empty]))
+      return { ...keys, tag: empty, home: home.packed(false), entity: entity.packed(true) }
+    }
+    const core = write(
+      'core',
+      [
+        ['starfallharbor', 1, 0, CHARACTER | both, 0, 4, 0],
+        ['starfallharbor', 3, 0, CHARACTER | SHADOWED | both, 0, 7, 0],
+      ],
+      [
+        [1, 'c/x:1', [['Pip', 'en', 0, 0]], [], [], [], 0, 4, 0, 0, [], 'starfall_harbor'],
+        [3, 'c/x:3', [['Wren', 'en', 0, 0]], [], [], [], 0, 7, 0, 0, [], 'starfall_harbor'],
+      ],
+    )
+    const unlicensed = write(
+      'unlicensed',
+      [
+        ['starfallharbor', 1, 50, CHARACTER | both, 0, 4, 0],
+        ['tidepoolacademy', 3, 80, CHARACTER | both, 0, 7, 0],
+      ],
+      [
+        [1, 'c/x:1', [], [['pip_(starfall_harbor)', 50]], [], [], 0, 4, 0, 0, [], 'starfall_harbor'],
+        [3, 'c/x:3', [], [['wren_(tidepool_academy)', 80]], [], [], 0, 7, 0, 0, [], 'tidepool_academy'],
+      ],
+    )
+    writeFileSync(
+      join(dir, 'manifest.json'),
+      JSON.stringify({ aninames: FORMAT, built: '', layers: { core, unlicensed } }),
+    )
+    const names = new Names(fileSource(dir))
+    expect((await names.cast('Starfall Harbor')).map((found) => found.id)).toEqual(['c/x:1'])
+    expect((await names.cast('tidepool_academy')).map((found) => [found.id, found.home])).toEqual([
+      ['c/x:3', 'tidepool_academy'],
+    ])
+    const coreOnly = new Names(fileSource(dir), { layers: ['core'] })
+    expect((await coreOnly.cast('starfall_harbor')).map((found) => found.id)).toEqual(['c/x:3', 'c/x:1'])
+    expect((await coreOnly.cast('starfall_harbor', { limit: 1 })).map((found) => found.id)).toEqual(['c/x:3'])
+    expect((await coreOnly.lookup(['c/x:3']))[0]?.home).toBe('starfall_harbor')
+    expect((await names.lookup(['c/x:3']))[0]?.home).toBe('tidepool_academy')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
