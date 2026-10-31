@@ -32,16 +32,6 @@ run = "bun src/cli.ts compare"
 description = "compile the client library into lib/ for the npm package"
 run = "rm -rf lib && tsc -p tsconfig.lib.json"
 
-[tasks.ttheme]
-description = "copy the ttheme slices into ttheme's cache, where it reads them"
-run = '''
-set -e
-target="${XDG_CACHE_HOME:-$HOME/.cache}/ttheme/aninames"
-mkdir -p "$target"
-cp dist/ttheme-*.json "$target/"
-ls -la "$target"
-'''
-
 [tasks.search]
 description = "search the built layers: mise run search <query>"
 run = "bun src/cli.ts search"

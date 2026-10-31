@@ -1,7 +1,9 @@
 import { Database } from 'bun:sqlite'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { alike, levelsOf, tiesOf, upward, wordsOf } from './graph.ts'
 import { foldHan } from './han.ts'
+import { type Appearance, type Choice, chosenOf, FLOOR, homeOf, learnedOf, tierOf, weightOf } from './homes.ts'
 import {
   type Entry,
   type Kind,
@@ -13,20 +15,23 @@ import {
   ROLES,
   type Source,
 } from './model.ts'
+import { mergeCharacters, workTitles } from './resolve.ts'
 import { load, NAMES } from './sources/index.ts'
 import { readStage, stagePath } from './stage.ts'
 import {
   flat,
   hangulForms,
-  hasKanji,
   initials,
   isKana,
+  japanese,
   kanaToRomaji,
   latinKey,
   partKey,
   qualifiers,
   soundKeys,
+  titleKey,
 } from './text.ts'
+import { node, Union } from './union.ts'
 
 export const DIST = join(import.meta.dirname, '..', 'dist')
 
@@ -61,62 +66,6 @@ export interface Staged {
   popularity: number
 }
 
-export class Union {
-  private parent = new Map<string, string>()
-  private items = new Map<string, string>()
-  refused = 0
-
-  has(key: string): boolean {
-    return this.parent.has(key)
-  }
-
-  add(key: string): void {
-    if (this.parent.has(key)) return
-    this.parent.set(key, key)
-    if (key.includes('|wikidata:')) this.items.set(key, key)
-  }
-
-  anchored(key: string): boolean {
-    return this.items.has(this.find(key))
-  }
-
-  find(key: string): string {
-    let root = key
-    for (let next = this.parent.get(root); next !== undefined && next !== root; next = this.parent.get(root)) {
-      root = next
-    }
-    let walk = key
-    while (walk !== root) {
-      const next = this.parent.get(walk) ?? root
-      this.parent.set(walk, root)
-      walk = next
-    }
-    return root
-  }
-
-  union(a: string, b: string): boolean {
-    this.add(a)
-    this.add(b)
-    const ra = this.find(a)
-    const rb = this.find(b)
-    if (ra === rb) return true
-    const ia = this.items.get(ra)
-    const ib = this.items.get(rb)
-    if (ia && ib && ia !== ib) {
-      this.refused++
-      return false
-    }
-    this.parent.set(rb, ra)
-    const item = ia ?? ib
-    if (item) this.items.set(ra, item)
-    return true
-  }
-}
-
-export function node(kind: Kind, ref: string): string {
-  return `${kind}|${ref}`
-}
-
 function strength(ref: string): number {
   const index = STRENGTH.indexOf(ref.slice(0, ref.indexOf(':')) as Namespace)
   return index < 0 ? STRENGTH.length : index
@@ -128,10 +77,6 @@ function strongest(refs: Iterable<string>): string {
     if (!best || strength(ref) < strength(best) || (strength(ref) === strength(best) && ref < best)) best = ref
   }
   return best
-}
-
-function japanese(text: string): boolean {
-  return hasKanji(text) || /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text)
 }
 
 export async function readAll(): Promise<{ all: Staged[]; sources: Source[] }> {
@@ -148,7 +93,7 @@ export async function readAll(): Promise<{ all: Staged[]; sources: Source[] }> {
     for await (const entry of readStage(name)) entries.push(entry)
     for (const kind of ['work', 'character'] as const) {
       const ranked = entries
-        .filter((e) => e.kind === kind && e.rank !== undefined)
+        .filter((e) => e.kind === kind && (e.rank ?? 0) > 0)
         .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
       const top = Math.log1p(ranked[Math.floor(0.99 * (ranked.length - 1))]?.rank ?? 0) || 1
       for (const e of ranked) {
@@ -156,12 +101,12 @@ export async function readAll(): Promise<{ all: Staged[]; sources: Source[] }> {
           source: name,
           layer: source.layer,
           entry: e,
-          popularity: Math.min(1, Math.log1p(Math.max(0, e.rank ?? 0)) / top),
+          popularity: Math.log1p(Math.max(0, e.rank ?? 0)) / top,
         })
       }
     }
     for (const e of entries) {
-      if (e.kind === undefined || e.rank === undefined)
+      if (e.kind === undefined || !((e.rank ?? 0) > 0))
         all.push({ source: name, layer: source.layer, entry: e, popularity: 0 })
     }
     console.log(`build: read ${name} (${source.layer}): ${entries.length} entries`)
@@ -274,152 +219,6 @@ function mergeByName(union: Union, staged: Staged[], kind: Kind): number {
   return merged
 }
 
-interface Holder {
-  node: string
-  source: string
-  strong: boolean
-}
-
-interface CharacterKey {
-  key: string
-  loose: boolean
-}
-
-function characterKey(text: string): CharacterKey | undefined {
-  const base = qualifiers(text).base
-  if (japanese(base)) {
-    const key = foldHan(flat(base))
-    const length = [...key].length
-    return length >= 2 ? { key: `ja|${key}`, loose: length < 3 } : undefined
-  }
-  if (!/^[\p{Script=Latin}\s.'’-]+$/u.test(base.normalize('NFKD').replace(/\p{M}/gu, ''))) return undefined
-  const tokens = latinKey(base)
-    .split(' ')
-    .filter((token) => token.length >= 2)
-  if (tokens.length === 0 || tokens.join('').length < 3) return undefined
-  return { key: `latin|${tokens.join(' ')}`, loose: tokens.length < 2 }
-}
-
-function workTitles(union: Union, staged: Staged[]): Map<string, Set<string>> {
-  const titles = new Map<string, Set<string>>()
-  for (const s of staged) {
-    if (s.entry.attach || s.entry.kind !== 'work') continue
-    const root = union.find(node('work', s.entry.id))
-    for (const name of s.entry.names) {
-      if (japanese(name.text)) continue
-      const key = latinKey(name.text)
-      if (key.length < 3) continue
-      const roots = titles.get(key) ?? new Set<string>()
-      roots.add(root)
-      titles.set(key, roots)
-    }
-  }
-  return titles
-}
-
-function mergeCharacters(union: Union, staged: Staged[]): number {
-  const titles = workTitles(union, staged)
-  const works = new Map<string, Set<string>>()
-  const sources = new Map<string, Set<string>>()
-  const index = new Map<string, { loose: boolean; holders: Holder[] }>()
-  const add = <T>(map: Map<string, Set<T>>, key: string, value: T) => {
-    const set = map.get(key) ?? new Set<T>()
-    set.add(value)
-    map.set(key, set)
-  }
-  for (const s of staged) {
-    const { entry } = s
-    if (entry.attach || entry.kind !== 'character') continue
-    const self = node('character', entry.id)
-    const root = union.find(self)
-    add(sources, root, s.source)
-    for (const work of entry.works ?? []) {
-      const key = node('work', work)
-      if (union.has(key)) add(works, root, union.find(key))
-    }
-    let quals: string[] = []
-    if (s.source === 'danbooru') {
-      quals = qualifiers(entry.id.slice('danbooru:'.length).replace(/_/g, ' ')).quals
-      if (quals.length > 1) continue
-      for (const qual of quals) {
-        const roots = titles.get(latinKey(qual))
-        if (roots && roots.size <= 3) for (const work of roots) add(works, root, work)
-      }
-    }
-    const strongest = new Map<string, CharacterKey & { strong: boolean }>()
-    for (const name of entry.names) {
-      if (name.kind === 'reading' || name.kind === 'short') continue
-      const found = characterKey(name.text)
-      if (!found) continue
-      const chinese = name.lang?.startsWith('zh') ?? false
-      const strong =
-        !chinese &&
-        (name.kind === 'main' || name.kind === 'official' || (s.source === 'danbooru' && japanese(name.text)))
-      const known = strongest.get(found.key)
-      if (!known || (strong && !known.strong)) strongest.set(found.key, { ...found, strong })
-    }
-    for (const found of strongest.values()) {
-      const group = index.get(found.key) ?? { loose: found.loose, holders: [] }
-      group.holders.push({ node: self, source: s.source, strong: found.strong })
-      index.set(found.key, group)
-    }
-  }
-  const worksOf = (root: string) => works.get(root) ?? new Set<string>()
-  const shares = (a: string, b: string) => {
-    const wa = worksOf(a)
-    const wb = worksOf(b)
-    if (wa.size === 0 || wb.size === 0) return 'unknown'
-    for (const work of wa) if (wb.has(work)) return 'yes'
-    return 'disjoint'
-  }
-  const edges: { a: string; b: string; weight: number }[] = []
-  for (const { loose, holders } of index.values()) {
-    if (holders.length > 60 || new Set(holders.map((h) => h.source)).size < 2) continue
-    const rootsBySource = new Map<string, Set<string>>()
-    for (const holder of holders) add(rootsBySource, holder.source, union.find(holder.node))
-    for (let i = 0; i < holders.length; i++) {
-      for (let j = i + 1; j < holders.length; j++) {
-        const x = holders[i] as Holder
-        const y = holders[j] as Holder
-        if (x.source === y.source) continue
-        const a = union.find(x.node)
-        const b = union.find(y.node)
-        if (a === b) continue
-        const verdict = shares(a, b)
-        if (verdict === 'yes') {
-          const rivalsOfB = [...(rootsBySource.get(x.source) ?? [])].filter(
-            (r) => r !== a && shares(r, b) !== 'disjoint',
-          )
-          const rivalsOfA = [...(rootsBySource.get(y.source) ?? [])].filter(
-            (r) => r !== b && shares(r, a) !== 'disjoint',
-          )
-          if (rivalsOfA.length === 0 && rivalsOfB.length === 0) edges.push({ a, b, weight: 2 })
-          continue
-        }
-        if (loose || (!x.strong && !y.strong)) continue
-        if ((rootsBySource.get(x.source)?.size ?? 0) !== 1 || (rootsBySource.get(y.source)?.size ?? 0) !== 1) continue
-        edges.push({ a, b, weight: 1 })
-      }
-    }
-  }
-  edges.sort((p, q) => q.weight - p.weight)
-  let merged = 0
-  for (const edge of edges) {
-    const a = union.find(edge.a)
-    const b = union.find(edge.b)
-    if (a === b) continue
-    const sa = sources.get(a) ?? new Set<string>()
-    const sb = sources.get(b) ?? new Set<string>()
-    if ([...sa].some((source) => sb.has(source))) continue
-    if (!union.union(a, b)) continue
-    const root = union.find(a)
-    sources.set(root, new Set([...sa, ...sb]))
-    works.set(root, new Set([...worksOf(a), ...worksOf(b)]))
-    merged++
-  }
-  return merged
-}
-
 export function link(staged: Staged[], hide = false): Union {
   const union = new Union()
   for (const s of staged) {
@@ -436,7 +235,7 @@ export function link(staged: Staged[], hide = false): Union {
   console.log(`build: refused ${union.refused} unions that would join two Wikidata items`)
   const works = mergeByName(union, staged, 'work')
   console.log(`build: merged ${works} work pairs by a Japanese title unique in each source and medium`)
-  const merged = mergeCharacters(union, staged)
+  const merged = mergeCharacters(union, staged, workTitles(union, staged))
   console.log(`build: merged ${merged} character pairs by name`)
   return union
 }
@@ -501,13 +300,19 @@ export function groupsOf(nodes: readonly string[], tied: (a: string, b: string) 
   return [...groups.values()]
 }
 
-export function familyOf(groups: readonly string[][], anchors: ReadonlySet<string>): string[] {
+export function familyOf(
+  groups: readonly string[][],
+  anchors: ReadonlySet<string>,
+  named: ReadonlySet<string> = new Set(),
+): string[] {
   const anchored = groups.filter((group) => group.some((at) => anchors.has(at)))
   if (anchored.length > 0) return anchored.flat()
-  const largest = [...groups].sort((a, b) => b.length - a.length)[0] ?? []
+  const titled = groups.filter((group) => group.some((at) => named.has(at)))
+  if (titled.length === 1) return titled[0] ?? []
+  const [largest = [], second = []] = [...groups].sort((a, b) => b.length - a.length)
   if (groups.length <= 1) return largest
   const total = groups.reduce((sum, group) => sum + group.length, 0)
-  return largest.length >= 2 && largest.length * 3 >= total * 2 ? largest : []
+  return largest.length >= 2 && largest.length > second.length && largest.length * 2 > total ? largest : []
 }
 
 function firstYear(entity: Entity): number {
@@ -538,7 +343,7 @@ function linksOf(union: Union, entities: Map<string, Entity>): Map<string, Set<s
   for (const [root, entity] of entities) {
     if (entity.kind !== 'work') continue
     for (const m of entity.members) {
-      for (const other of [...(m.entry.related ?? []), ...(m.entry.near ?? [])]) {
+      for (const other of [...tiesOf(m.entry), ...(m.entry.near ?? [])]) {
         const key = node('work', other)
         const there = union.has(key) ? union.find(key) : undefined
         if (there && there !== root) tie(root, there)
@@ -548,11 +353,33 @@ function linksOf(union: Union, entities: Map<string, Entity>): Map<string, Set<s
   return links
 }
 
+function parentsOf(union: Union, entities: Map<string, Entity>): Map<string, Set<string>> {
+  const parents = new Map<string, Set<string>>()
+  for (const [root, entity] of entities) {
+    if (entity.kind !== 'work') continue
+    for (const m of entity.members) {
+      if (m.entry.attach) continue
+      for (const ref of upward(m.entry)) {
+        const key = node('work', ref)
+        const there = union.has(key) ? union.find(key) : undefined
+        if (!there || there === root || !entities.has(there)) continue
+        const set = parents.get(root) ?? new Set<string>()
+        set.add(there)
+        parents.set(root, set)
+      }
+    }
+  }
+  return parents
+}
+
+const LATIN_TITLE = 4
+
 function attachEntries(
   union: Union,
   staged: Staged[],
   entities: Map<string, Entity>,
   links: ReadonlyMap<string, ReadonlySet<string>>,
+  titles: ReadonlyMap<string, ReadonlySet<string>>,
 ): { attached: number; missed: number } {
   const workNames = new Map<string, Set<string>>()
   for (const [root, entity] of entities) {
@@ -588,7 +415,7 @@ function attachEntries(
   for (const [root, entity] of entities) {
     for (const m of entity.members) {
       if (entity.kind === 'work') {
-        for (const other of m.entry.related ?? []) {
+        for (const other of tiesOf(m.entry)) {
           const there = workRoot(other)
           if (there && there !== root) {
             remember(neighbours, root, there)
@@ -649,8 +476,16 @@ function attachEntries(
     const own = workRoot(entry.id)
     if (own && entities.has(own)) anchors.add(own)
     const candidates = new Set(anchors)
-    for (const text of entry.link ?? []) for (const root of workNames.get(flat(text)) ?? []) candidates.add(root)
-    const chosen = familyOf(groupsOf([...candidates], tied), anchors)
+    const titledBy = (text: string) => {
+      const key = titleKey(text)
+      if (japanese(text)) return workNames.get(flat(text)) ?? new Set<string>()
+      return (key.replace(/\s+/g, '').length >= LATIN_TITLE ? titles.get(key) : undefined) ?? new Set<string>()
+    }
+    for (const text of entry.link ?? []) for (const root of titledBy(text)) candidates.add(root)
+    const named = new Set(
+      entry.names.filter((name) => name.kind === 'main').flatMap((name) => [...titledBy(name.text)]),
+    )
+    const chosen = familyOf(groupsOf([...candidates], tied), anchors, named)
     const head =
       chosen.find((root) => anchors.has(root)) ??
       chosen.toSorted((a, b) => {
@@ -735,47 +570,10 @@ function tagsOf(root: string, entity: Entity, union: Union, seen: (s: Staged) =>
   return tags
 }
 
-export function homeOf(
-  quals: readonly string[],
-  direct: ReadonlyMap<string, string>,
-  found: string | undefined,
-  learned: ReadonlyMap<string, string>,
-  fits: (tag: string) => boolean,
-): string | undefined {
-  const named = quals.map((qual) => direct.get(qual)).find(Boolean)
-  if (named) return named
-  if (found) return found
-  for (const qual of quals) {
-    const tag = learned.get(qual)
-    if (tag && fits(tag)) return tag
-  }
-  return undefined
-}
-
-export function votedOf(votes: ReadonlyMap<string, number>, posts: (tag: string) => number): string | undefined {
-  return [...votes].sort((a, b) => b[1] - a[1] || posts(b[0]) - posts(a[0]) || (a[0] < b[0] ? -1 : 1))[0]?.[0]
-}
-
-export function tierOf(roles: ReadonlyMap<string, number>, reaches: (work: string) => boolean, known: boolean): number {
-  let best = ROLES.length
-  for (const [work, role] of roles) if (role < best && reaches(work)) best = role
-  if (best < 2) return best
-  return known ? 2 : 3
-}
-
-export function learnedOf(votes: ReadonlyMap<string, ReadonlyMap<string, number>>): Map<string, string> {
-  const out = new Map<string, string>()
-  for (const [qual, tags] of votes) {
-    const total = [...tags.values()].reduce((sum, count) => sum + count, 0)
-    const [tag, count] = [...tags].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0] ?? ['', 0]
-    if (count >= 2 && count * 3 >= total * 2) out.set(qual, tag)
-  }
-  return out
-}
-
 function homesOf(
   union: Union,
   entities: Map<string, Entity>,
+  parents: ReadonlyMap<string, ReadonlySet<string>>,
   links: ReadonlyMap<string, ReadonlySet<string>>,
   families: ReadonlyMap<string, number | null>,
   seen: (s: Staged) => boolean,
@@ -805,18 +603,59 @@ function homesOf(
     const known = direct.get(key)
     if (!known || (qualifiers(known).quals.length > 0 && quals.length === 0)) direct.set(key, tag)
   }
-  const reached = (root: string) => {
-    const own = workTags.get(root)
-    if (own) return new Set(own.keys())
-    const out = new Set<string>()
-    for (const other of links.get(root) ?? []) for (const tag of workTags.get(other)?.keys() ?? []) out.add(tag)
-    return out
+  const above = new Map<string, Map<string, number>>()
+  const ownUp = (root: string): Map<string, number> => {
+    const found = new Map<string, number>()
+    for (const [at, level] of levelsOf(parents, root)) {
+      for (const tag of workTags.get(at)?.keys() ?? []) {
+        if (level < (found.get(tag) ?? Number.POSITIVE_INFINITY)) found.set(tag, level)
+      }
+    }
+    return found
+  }
+  const titles = new Map<string, Set<string>[]>()
+  const titlesOf = (root: string) => {
+    let found = titles.get(root)
+    if (!found) {
+      found = (entities.get(root)?.members ?? []).flatMap((m) =>
+        m.entry.attach
+          ? []
+          : m.entry.names
+              .filter(
+                (name) =>
+                  name.kind === 'main' ||
+                  name.kind === 'official' ||
+                  (name.kind === 'synonym' && (name.lang === 'en' || name.lang === 'ja-Latn')),
+              )
+              .map((name) => wordsOf(name.text))
+              .filter((words) => words.size > 0),
+      )
+      titles.set(root, found)
+    }
+    return found
+  }
+  const alikeTitles = (a: string, b: string) => titlesOf(a).some((x) => titlesOf(b).some((y) => alike(x, y)))
+  const tagsUp = (root: string): Map<string, number> => {
+    const known = above.get(root)
+    if (known) return known
+    const found = ownUp(root)
+    if (found.size === 0) {
+      for (const other of links.get(root) ?? []) {
+        if (!alikeTitles(root, other)) continue
+        for (const [tag, level] of ownUp(other)) {
+          if (level + 1 < (found.get(tag) ?? Number.POSITIVE_INFINITY)) found.set(tag, level + 1)
+        }
+      }
+    }
+    above.set(root, found)
+    return found
   }
   const chosen: {
     id: string
     quals: string[]
     voted: Set<string>
-    found: string | undefined
+    choice: Choice | undefined
+    franchise: string | undefined
     posts: number | null
     roles: Map<string, number>
     known: boolean
@@ -847,19 +686,29 @@ function homesOf(
       }
       for (const [ref, role] of m.entry.roles ?? []) {
         const there = workRoot(ref)
-        if (there) roles.set(there, Math.min(roles.get(there) ?? ROLES.length, ROLES.indexOf(role)))
+        if (!there) continue
+        works.add(there)
+        roles.set(there, Math.min(roles.get(there) ?? ROLES.length, ROLES.indexOf(role)))
       }
     }
-    const tally = new Map<string, number>()
-    for (const work of works) for (const tag of reached(work)) tally.set(tag, (tally.get(tag) ?? 0) + 1)
-    const franchise = [...series]
-      .flatMap((there) => [...(workTags.get(there)?.keys() ?? [])])
-      .sort((a, b) => postsOf(b) - postsOf(a))[0]
-    const found = votedOf(tally, postsOf) ?? franchise
-    if (quals.length === 0 && !found) continue
     const best = own.find(([, count]) => count !== null)?.[1] ?? null
-    chosen.push({ id: entity.id, quals, voted: new Set(tally.keys()), found, posts: best, roles, known })
+    const appearances: Appearance[] = [...works].map((work) => ({
+      weight: weightOf(roles.get(work)),
+      tags: tagsUp(work),
+    }))
+    const fits = (tag: string) => {
+      const count = posts.get(tag)
+      return best === null || count === null || count === undefined || count >= FLOOR * best
+    }
+    const choice = chosenOf(appearances, fits, postsOf)
+    const franchise = [...series]
+      .flatMap((there) => [...tagsUp(there)])
+      .sort((a, b) => a[1] - b[1] || postsOf(b[0]) - postsOf(a[0]))[0]?.[0]
+    if (quals.length === 0 && !choice && !franchise) continue
+    const voted = new Set(appearances.flatMap((appearance) => [...appearance.tags.keys()]))
+    chosen.push({ id: entity.id, quals, voted, choice, franchise, posts: best, roles, known })
     const qual = quals[0]
+    const found = choice?.tag ?? franchise
     if (qual && found) {
       const tags = learning.get(qual) ?? new Map<string, number>()
       tags.set(found, (tags.get(found) ?? 0) + 1)
@@ -868,10 +717,13 @@ function homesOf(
   }
   const learned = learnedOf(learning)
   const homes = new Map<string, Home>()
-  for (const { id, quals, voted, found, posts: count, roles, known } of chosen) {
-    const tag = homeOf(quals, direct, found, learned, (each) => voted.size === 0 || voted.has(each))
-    if (tag)
-      homes.set(id, { tag, posts: count, tier: tierOf(roles, (work) => workTags.get(work)?.has(tag) ?? false, known) })
+  for (const { id, quals, voted, choice, franchise, posts: count, roles, known } of chosen) {
+    const named = quals.map((qual) => direct.get(qual)).find(Boolean)
+    const taught = quals
+      .map((qual) => learned.get(qual))
+      .find((tag) => tag !== undefined && (voted.size === 0 || voted.has(tag)))
+    const tag = homeOf(choice, named, franchise, taught)
+    if (tag) homes.set(id, { tag, posts: count, tier: tierOf(roles, (work) => tagsUp(work).has(tag), known) })
   }
   return homes
 }
@@ -896,7 +748,7 @@ function namesOf(entity: Entity, layer: Layer, titles: Map<string, Set<string>>)
     const key = `${text}\u0000${name.lang ?? ''}\u0000${name.kind}`
     if (seen.has(key)) return
     seen.add(key)
-    const variant = unlikely || (qual !== null && !titles.has(latinKey(qual)))
+    const variant = unlikely || (qual !== null && !titles.has(titleKey(qual)))
     rows.push({ entity: entity.id, text, lang: name.lang ?? null, kind: name.kind, source, qual, variant, support: 0 })
   }
   for (const m of entity.members) {
@@ -923,6 +775,75 @@ function namesOf(entity: Entity, layer: Layer, titles: Map<string, Set<string>>)
   }
   for (const row of rows) row.support = backers.get(flat(row.text))?.size ?? 1
   return rows
+}
+
+const KIND_ORDER: Record<NameKind, number> = {
+  main: 0,
+  official: 0,
+  synonym: 1,
+  short: 2,
+  reading: 3,
+  redirect: 4,
+  section: 5,
+  generated: 6,
+}
+
+const SOURCE_ORDER = ['wikidata', 'anidb', 'vndb', 'aod', 'bangumi', 'kowiki', 'anissia', 'danbooru']
+
+function backersOf(entity: Entity): Map<string, number> {
+  const sets = new Map<string, Set<string>>()
+  for (const m of entity.members) {
+    for (const name of m.entry.names) {
+      const key = flat(name.text)
+      const set = sets.get(key) ?? new Set<string>()
+      set.add(m.source)
+      sets.set(key, set)
+    }
+  }
+  return new Map([...sets].map(([key, set]) => [key, set.size]))
+}
+
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+
+function written(lang: string, text: string): boolean {
+  if (lang === 'ja') return true
+  if (lang === 'ko') return /\p{Script=Hangul}/u.test(text)
+  if (lang === 'zh' || lang.startsWith('zh-')) return /\p{Script=Han}/u.test(text)
+  return !CJK.test(text)
+}
+
+function ahead(a: readonly number[], b: readonly number[]): boolean {
+  for (let at = 0; at < a.length; at++) if (a[at] !== b[at]) return (a[at] ?? 0) < (b[at] ?? 0)
+  return false
+}
+
+function bestOf(rows: Row[], backers: ReadonlyMap<string, number>): Map<string, { row: Row; key: number[] }> {
+  const out = new Map<string, { row: Row; key: number[] }>()
+  rows.forEach((row, at) => {
+    if (!row.lang || row.qual !== null || row.variant || !written(row.lang, row.text)) return
+    const source = SOURCE_ORDER.indexOf(row.source)
+    const key = [
+      KIND_ORDER[row.kind],
+      -(backers.get(flat(row.text)) ?? 1),
+      source < 0 ? SOURCE_ORDER.length : source,
+      at,
+    ]
+    const known = out.get(row.lang)
+    if (!known || ahead(key, known.key)) out.set(row.lang, { row, key })
+  })
+  return out
+}
+
+function preferencesOf(entity: Entity, layer: Layer, rows: Row[], titles: Map<string, Set<string>>): Map<Row, number> {
+  const backers = backersOf(entity)
+  const others = [...new Set(entity.members.map((m) => m.layer))]
+    .filter((other) => other !== layer)
+    .map((other) => bestOf(namesOf(entity, other, titles), backers))
+  const out = new Map<Row, number>()
+  for (const [lang, { row, key }] of bestOf(rows, backers)) {
+    out.set(row, others.filter((other) => ahead(other.get(lang)?.key ?? [Infinity], key)).length)
+  }
+  return out
 }
 
 const ANIME_TYPES = new Set(['TV', 'MOVIE', 'OVA', 'ONA', 'SPECIAL', 'UNKNOWN'])
@@ -975,14 +896,14 @@ function schema(db: Database): void {
   )
   db.run('CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL, rank REAL)')
   db.run(
-    'CREATE TABLE names (rowid INTEGER PRIMARY KEY, entity TEXT NOT NULL, ekind TEXT NOT NULL, text TEXT NOT NULL, lang TEXT, kind TEXT NOT NULL, source TEXT NOT NULL, flat TEXT NOT NULL, latin TEXT NOT NULL, qual TEXT, variant INTEGER NOT NULL, support INTEGER NOT NULL)',
+    'CREATE TABLE names (rowid INTEGER PRIMARY KEY, entity TEXT NOT NULL, ekind TEXT NOT NULL, text TEXT NOT NULL, lang TEXT, kind TEXT NOT NULL, source TEXT NOT NULL, flat TEXT NOT NULL, latin TEXT NOT NULL, qual TEXT, variant INTEGER NOT NULL, support INTEGER NOT NULL, pref INTEGER)',
   )
   db.run('CREATE TABLE sounds (name INTEGER NOT NULL, entity TEXT NOT NULL, key TEXT NOT NULL)')
   db.run('CREATE TABLE parts (name INTEGER NOT NULL, entity TEXT NOT NULL, part TEXT NOT NULL)')
   db.run('CREATE TABLE initials (name INTEGER NOT NULL, entity TEXT NOT NULL, key TEXT NOT NULL)')
   db.run('CREATE TABLE works (character TEXT NOT NULL, work TEXT NOT NULL)')
   db.run('CREATE TABLE related (work TEXT NOT NULL, other TEXT NOT NULL)')
-  db.run('CREATE TABLE ranks (entity TEXT PRIMARY KEY, rank REAL NOT NULL, weight INTEGER NOT NULL)')
+  db.run('CREATE TABLE ranks (entity TEXT PRIMARY KEY, rank REAL NOT NULL)')
   db.run('CREATE TABLE adults (entity TEXT PRIMARY KEY)')
   db.run(
     'CREATE TABLE homes (entity TEXT PRIMARY KEY, tag TEXT NOT NULL, posts INTEGER, shadowed INTEGER NOT NULL, tier INTEGER NOT NULL)',
@@ -1032,13 +953,14 @@ export async function build(): Promise<void> {
   const { union, entities } = resolveEntities(staged)
   const titles = workTitles(union, staged)
   const links = linksOf(union, entities)
-  const { attached, missed } = attachEntries(union, staged, entities, links)
+  const { attached, missed } = attachEntries(union, staged, entities, links, titles)
+  const parents = parentsOf(union, entities)
   console.log(`build: ${entities.size} entities, ${attached} attach entries placed, ${missed} found no entity`)
   const families = new Map<string, number | null>()
   for (const s of staged) if (s.entry.family) families.set(s.entry.id.slice(TAG.length), s.entry.rank ?? null)
   const homes: Partial<Record<Layer, Map<string, Home>>> = {
-    core: homesOf(union, entities, links, new Map(), (s) => s.layer === 'core'),
-    unlicensed: homesOf(union, entities, links, families, () => true),
+    core: homesOf(union, entities, parents, links, new Map(), (s) => s.layer === 'core'),
+    unlicensed: homesOf(union, entities, parents, links, families, () => true),
   }
   console.log(
     `build: ${homes.core?.size} characters have a home tag from core, ${homes.unlicensed?.size} from every layer`,
@@ -1071,14 +993,14 @@ export async function build(): Promise<void> {
     )
     const insertRef = db.prepare('INSERT INTO refs (entity, ref, rank) VALUES (?, ?, ?)')
     const insertName = db.prepare(
-      'INSERT INTO names (entity, ekind, text, lang, kind, source, flat, latin, qual, variant, support) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid',
+      'INSERT INTO names (entity, ekind, text, lang, kind, source, flat, latin, qual, variant, support, pref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid',
     )
     const insertSound = db.prepare('INSERT INTO sounds (name, entity, key) VALUES (?, ?, ?)')
     const insertPart = db.prepare('INSERT INTO parts (name, entity, part) VALUES (?, ?, ?)')
     const insertInitials = db.prepare('INSERT INTO initials (name, entity, key) VALUES (?, ?, ?)')
     const insertWork = db.prepare('INSERT INTO works (character, work) VALUES (?, ?)')
     const insertRelated = db.prepare('INSERT INTO related (work, other) VALUES (?, ?)')
-    const insertRank = db.prepare('INSERT INTO ranks (entity, rank, weight) VALUES (?, ?, ?)')
+    const insertRank = db.prepare('INSERT INTO ranks (entity, rank) VALUES (?, ?)')
     const insertAdult = db.prepare('INSERT INTO adults (entity) VALUES (?)')
     const insertHome = db.prepare('INSERT INTO homes (entity, tag, posts, shadowed, tier) VALUES (?, ?, ?, ?, ?)')
     let nameCount = 0
@@ -1099,7 +1021,7 @@ export async function build(): Promise<void> {
           )
         }
         const refs = new Map<string, number | null>()
-        const scores = new Map<string, number>()
+        let best = 0
         const works = new Set<string>()
         const related = new Set<string>()
         for (const m of entity.members) {
@@ -1108,24 +1030,18 @@ export async function build(): Promise<void> {
           for (const ref of m.entry.refs ?? []) {
             if (union.find(node(entity.kind, ref)) === root && !refs.has(ref)) refs.set(ref, null)
           }
-          if (m.entry.rank !== undefined) {
-            const best = scores.get(m.source) ?? 0
-            scores.set(m.source, Math.max(best, m.popularity))
-          }
+          if (m.popularity > 0) best = Math.max(best, m.popularity)
           for (const work of m.entry.works ?? []) {
             const id = resolve('work', work)
             if (id) works.add(id)
           }
-          for (const other of m.entry.related ?? []) {
+          for (const other of tiesOf(m.entry)) {
             const id = resolve('work', other)
             if (id && id !== entity.id) related.add(id)
           }
         }
         for (const [ref, rank] of refs) insertRef.run(entity.id, ref, rank)
-        if (scores.size > 0) {
-          const values = [...scores.values()]
-          insertRank.run(entity.id, values.reduce((sum, value) => sum + value, 0) / values.length, values.length)
-        }
+        if (best > 0) insertRank.run(entity.id, best)
         for (const work of works) insertWork.run(entity.id, work)
         const flagged =
           entity.kind === 'work'
@@ -1136,7 +1052,9 @@ export async function build(): Promise<void> {
           insertRelated.run(entity.id, other)
           insertRelated.run(other, entity.id)
         }
-        for (const row of namesOf(entity, layer, titles)) {
+        const rows = namesOf(entity, layer, titles)
+        const prefs = preferencesOf(entity, layer, rows, titles)
+        for (const row of rows) {
           const inserted = insertName.get(
             row.entity,
             entity.kind,
@@ -1149,6 +1067,7 @@ export async function build(): Promise<void> {
             row.qual,
             row.variant ? 1 : 0,
             row.support,
+            prefs.get(row) ?? null,
           ) as { rowid: number }
           nameCount++
           for (const key of soundKeys(qualifiers(row.text).base)) insertSound.run(inserted.rowid, row.entity, key)

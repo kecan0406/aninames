@@ -4,6 +4,16 @@ import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from '..
 import type { View } from './chunks.ts'
 import { ADULT, CHARACTER, type EntityRow, type KeyRow, type KeyTable, MAIN } from './format.ts'
 
+export type Match = 'name' | 'part' | 'prefix' | 'sound' | 'typo' | 'family'
+
+export function matchOf(how: string): Match {
+  const inner = how.replace(/^layout\((.*)\)$/, '$1')
+  if (inner.startsWith('family(')) return 'family'
+  if (inner === 'part' || inner === 'sound' || inner === 'typo') return inner
+  if (inner === 'prefix' || inner === 'typing' || inner === 'initials prefix') return 'prefix'
+  return 'name'
+}
+
 export interface Hit {
   eid: number
   kind: Kind

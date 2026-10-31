@@ -1,6 +1,6 @@
 import { join } from 'node:path'
-import { CHARACTERS, type Golden, TITLES, TYPOS } from '../tests/golden.ts'
-import type { Layer } from './model.ts'
+import { APART, CHARACTERS, type Golden, SAME, TITLES, TYPOS } from '../tests/golden.ts'
+import type { Layer, Ref } from './model.ts'
 import { Index } from './search.ts'
 
 function run(index: Index, set: Golden[], title: string): number {
@@ -90,12 +90,51 @@ async function ttheme(index: Index): Promise<number> {
   return missing.length + nameless.length
 }
 
+function pairs(index: Index, set: [Ref, Ref][], same: boolean, title: string): number {
+  let failed = 0
+  console.log(`\n${title}`)
+  for (const [a, b] of set) {
+    const x = index.resolve(a, 'character')
+    const y = index.resolve(b, 'character')
+    if (!x || !y) {
+      console.log(`  - ${a} ${b}: not in these layers`)
+      continue
+    }
+    const ok = (x === y) === same
+    if (!ok) failed++
+    console.log(`  ${ok ? '✓' : '✗'} ${a} ${same ? '=' : '≠'} ${b}${x === y ? ` (${x})` : ` (${x}, ${y})`}`)
+  }
+  return failed
+}
+
+async function homes(index: Index): Promise<void> {
+  const text = await Bun.file(join(import.meta.dirname, '..', 'tests', 'homes.tsv')).text()
+  const tally = { right: 0, wrong: 0, none: 0, unresolved: 0 }
+  const misses: string[] = []
+  for (const line of text.split('\n').filter(Boolean)) {
+    const [tag = '', want = ''] = line.split('\t')
+    const id = index.resolve(`danbooru:${tag}`, 'character')
+    const found = id ? index.home(id) : undefined
+    if (!id) tally.unresolved++
+    else if (found === want) tally.right++
+    else if (found) tally.wrong++
+    else tally.none++
+    if (found !== want) misses.push(`${tag}: ${id ? (found ?? 'no home') : 'not found'} (want ${want})`)
+  }
+  console.log(
+    `\nhomes of ttheme's commons characters (not counted): ${tally.right} right, ${tally.wrong} wrong, ${tally.none} without one, ${tally.unresolved} not found`,
+  )
+  if (process.env.ANINAMES_MISSES) for (const miss of misses) console.log(`    ✗ ${miss}`)
+}
+
 export async function evaluate(dir: string, layers: Layer[]): Promise<number> {
   const index = new Index(dir, layers)
   console.log(`layers: ${index.layers.join(', ')}`)
   let failed = run(index, TITLES, 'titles') + run(index, CHARACTERS, 'characters')
   run(index, TYPOS, 'typos (not counted)')
+  failed += pairs(index, SAME, true, 'one character') + pairs(index, APART, false, 'two characters')
   failed += await ttheme(index)
+  await homes(index)
   index.close()
   return failed
 }

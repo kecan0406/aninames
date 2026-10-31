@@ -114,8 +114,7 @@ interface Scores {
 
 function scores(dbs: Map<Layer, Database>, eid: Numbering): Scores {
   const n = eid.size
-  const sum = new Float64Array(n)
-  const weight = new Float64Array(n)
+  const best = new Float64Array(n)
   const prior = new Int8Array(n)
   const known = new Uint8Array(n)
   const adult = new Uint8Array(n)
@@ -124,13 +123,9 @@ function scores(dbs: Map<Layer, Database>, eid: Numbering): Scores {
   const all = new Map<number, Set<number>>()
   const related = new Map<Layer, Map<number, number[]>>()
   for (const [layer, db] of dbs) {
-    for (const row of db
-      .query<{ entity: string; rank: number; weight: number }, []>('SELECT entity, rank, weight FROM ranks')
-      .iterate()) {
+    for (const row of db.query<{ entity: string; rank: number }, []>('SELECT entity, rank FROM ranks').iterate()) {
       const at = eid.get(row.entity)
-      if (at === undefined) continue
-      sum[at] = (sum[at] ?? 0) + row.rank * row.weight
-      weight[at] = (weight[at] ?? 0) + row.weight
+      if (at !== undefined) best[at] = Math.max(best[at] ?? 0, row.rank)
     }
     for (const row of db
       .query<{ id: string; kind: string; medium: string | null; type: string | null }, []>(
@@ -173,7 +168,7 @@ function scores(dbs: Map<Layer, Database>, eid: Numbering): Scores {
     }
     related.set(layer, own)
   }
-  const rankOf = (at: number) => ((weight[at] ?? 0) > 0 ? (sum[at] ?? 0) / (weight[at] ?? 1) : 0)
+  const rankOf = (at: number) => best[at] ?? 0
   const out: Scores = {
     rank: new Int32Array(n),
     standing: new Int32Array(n),
@@ -327,8 +322,8 @@ function tagTable(db: Database, layer: Layer, table: 'tag' | 'home', context: Co
 
 const ENTITY_SQL = `WITH ids(id) AS (${IDS})
 SELECT ids.id AS id,
-  (SELECT json_group_array(json_array(text, lang, kind, source, qual)) FROM
-    (SELECT text, lang, kind, source, qual FROM names WHERE entity = ids.id ORDER BY rowid)) AS names,
+  (SELECT json_group_array(json_array(text, lang, kind, source, qual, pref)) FROM
+    (SELECT text, lang, kind, source, qual, pref FROM names WHERE entity = ids.id ORDER BY rowid)) AS names,
   (SELECT json_group_array(json_array(substr(ref, 10), rank)) FROM
     (SELECT ref, rank FROM refs WHERE entity = ids.id AND ref GLOB 'danbooru:*' ORDER BY rank IS NULL, rank DESC, rowid)) AS tags,
   (SELECT json_group_array(work) FROM
@@ -339,7 +334,14 @@ SELECT ids.id AS id,
   e.origin AS origin, e.year AS year, e.medium AS medium
 FROM ids LEFT JOIN entities e ON e.id = ids.id ORDER BY ids.id`
 
-type NameSource = [text: string, lang: string | null, kind: NameKind, source: string, qual: string | null]
+type NameSource = [
+  text: string,
+  lang: string | null,
+  kind: NameKind,
+  source: string,
+  qual: string | null,
+  pref: number | null,
+]
 
 function trimmed(tail: unknown[]): unknown[] {
   const out = [...tail]
@@ -371,11 +373,12 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
     .iterate()) {
     const at = eid.get(row.id)
     if (at === undefined) continue
-    const names = (JSON.parse(row.names) as NameSource[]).map(([text, lang, kind, source, qual]) => {
+    const names = (JSON.parse(row.names) as NameSource[]).map(([text, lang, kind, source, qual, pref]) => {
       const code = NAME_KINDS.indexOf(kind)
       if (code < 0) throw new Error(`aninames: name kind ${kind} has no code`)
       const found = TRUSTED.indexOf(source)
       const trust = found < 0 ? TRUSTED.length : found
+      if (pref !== null) return [text, lang, code, trust, qual, pref]
       return qual === null ? [text, lang, code, trust] : [text, lang, code, trust, qual]
     })
     const tags = (JSON.parse(row.tags) as [string, number | null][]).map(([tag, posts]) => [

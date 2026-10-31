@@ -111,6 +111,10 @@ export function hasKanji(text: string): boolean {
   return /\p{Script=Han}/u.test(text)
 }
 
+export function japanese(text: string): boolean {
+  return hasKanji(text) || /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text)
+}
+
 function syllables(kana: string): string[] {
   const chars = [...toHiragana(kana)]
   const out: string[] = []
@@ -302,6 +306,15 @@ export function latinKey(text: string): string {
         .replace(/nn/g, 'n'),
     )
   return tokens.sort().join(' ')
+}
+
+export function titleKey(text: string): string {
+  return foldLatin(text.normalize('NFKC'))
+    .replace(/[_\-.,:;!?'"’・/]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join(' ')
 }
 
 export function partKey(token: string): string {

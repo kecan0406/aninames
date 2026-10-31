@@ -1,5 +1,6 @@
 import type { Staged } from './build.ts'
-import { link, node, readAll, Union } from './build.ts'
+import { link, readAll } from './build.ts'
+import { node, Union } from './union.ts'
 
 const SOURCES = new Set(['wikidata', 'vndb', 'bangumi', 'danbooru'])
 

@@ -51,6 +51,20 @@ export const CHARACTERS: Golden[] = [
   { query: '마키세 크리스', kind: 'character', expect: KURISU },
   { query: 'Tomoe Mami', kind: 'character', expect: MAMI },
   { query: '巴マミ', kind: 'character', expect: MAMI },
+  { query: 'Ahri', kind: 'character', expect: ['danbooru:ahri_(league_of_legends)'] },
+]
+
+export const SAME: [Ref, Ref][] = [
+  ['danbooru:d.va_(overwatch)', 'bangumi:42247'],
+  ['danbooru:kitagawa_yusuke', 'bangumi:41231'],
+  ['danbooru:lucy_(cyberpunk)', 'wikidata:Q114067612'],
+  ['danbooru:sailor_mercury', 'wikidata:Q429403'],
+]
+
+export const APART: [Ref, Ref][] = [
+  ['vndb:c151730', 'wikidata:Q109321740'],
+  ['vndb:c151703', 'wikidata:Q130425850'],
+  ['danbooru:goemon_(persona_5)', 'bangumi:41231'],
 ]
 
 export const TYPOS: Golden[] = [

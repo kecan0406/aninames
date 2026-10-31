@@ -1,7 +1,5 @@
-import { createHash } from 'node:crypto'
 import { mkdir, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { gzipSync } from 'node:zlib'
 import { LAYERS, type Layer } from './model.ts'
 import { pick } from './sources/index.ts'
 
@@ -45,25 +43,6 @@ export async function pack(dir: string): Promise<void> {
     await Bun.write(join(target, `${name}.zst`), packed)
     note(name, data.byteLength, packed.byteLength)
   }
-  const layers: Record<string, { file: string; sha256: string; bytes: number }> = {}
-  for (const layer of LAYERS) {
-    const name = `ttheme-${layer}.json`
-    const file = Bun.file(join(dir, name))
-    if (!(await file.exists())) continue
-    const data = await file.bytes()
-    const packed = gzipSync(data, { level: 9 })
-    await Bun.write(join(target, `${name}.gz`), packed)
-    layers[layer] = {
-      file: `${name}.gz`,
-      sha256: createHash('sha256').update(data).digest('hex'),
-      bytes: data.byteLength,
-    }
-    note(name, data.byteLength, packed.byteLength)
-  }
-  await Bun.write(
-    join(target, 'ttheme.json'),
-    `${JSON.stringify({ built: new Date().toISOString(), layers }, null, 2)}\n`,
-  )
   await Bun.write(join(target, 'NOTICE.md'), await notice())
   console.log(`pack: ${(before / 1e6).toFixed(0)} MB → ${(after / 1e6).toFixed(0)} MB in ${target}`)
 }

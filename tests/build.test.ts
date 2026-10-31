@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test'
-import { adultCharactersOf, familyOf, groupsOf, homeOf, learnedOf, tierOf, votedOf } from '../src/build.ts'
+import { adultCharactersOf, familyOf, groupsOf } from '../src/build.ts'
+import { chosenOf, homeOf, learnedOf, tierOf } from '../src/homes.ts'
 import type { Entry, Ref } from '../src/model.ts'
 
-test('a copyright tag takes every same-title work the evidence ties together, and refuses an even split', () => {
+test('a copyright tag takes the same-title works the evidence ties together: the group its own name finds, else a group holding most of them, never a tie', () => {
   const ties = new Set(['tv|film', 'film|manga', 'game|tv'])
   const tied = (a: string, b: string) => ties.has(`${a}|${b}`) || ties.has(`${b}|${a}`)
   const series = groupsOf(['tv', 'film', 'manga', 'game', 'stray'], tied)
@@ -21,19 +22,25 @@ test('a copyright tag takes every same-title work the evidence ties together, an
   ).toEqual([])
   expect(familyOf([['a'], ['b']], new Set())).toEqual([])
   expect(familyOf([['a', 'b'], ['c']], new Set())).toEqual(['a', 'b'])
+  expect(familyOf([['vn', 'tv', 'manga'], ['comic'], ['comic_2']], new Set())).toEqual(['vn', 'tv', 'manga'])
+  expect(familyOf([['vn', 'tv'], ['stray'], ['other']], new Set())).toEqual([])
+  expect(familyOf([['game'], ['namesake']], new Set(), new Set(['game']))).toEqual(['game'])
+  expect(familyOf([['a', 'b'], ['c'], ['d']], new Set(), new Set(['c', 'd']))).toEqual([])
   expect(familyOf([['solo']], new Set())).toEqual(['solo'])
   expect(familyOf([], new Set())).toEqual([])
 })
 
-test('a character goes home by its qualifier, then by its works, then by what characters sharing its qualifier chose', () => {
-  const direct = new Map([['tidepool', 'tidepool_academy']])
-  const learned = new Map([['tpa', 'tidepool_academy']])
-  const anything = () => true
-  expect(homeOf(['tidepool'], direct, 'crossover_quest', learned, anything)).toBe('tidepool_academy')
-  expect(homeOf(['tpa'], direct, 'crossover_quest', learned, anything)).toBe('crossover_quest')
-  expect(homeOf(['tpa'], direct, undefined, learned, anything)).toBe('tidepool_academy')
-  expect(homeOf(['tpa'], direct, undefined, learned, (tag) => tag === 'crossover_quest')).toBeUndefined()
-  expect(homeOf([], direct, undefined, learned, anything)).toBeUndefined()
+test('a character goes home by the tag most of its works reach, then by its qualifier, then by its works, its franchise or what characters sharing its qualifier chose', () => {
+  expect(homeOf({ tag: 'crossover_quest', most: true }, 'tidepool_academy', undefined, undefined)).toBe(
+    'crossover_quest',
+  )
+  expect(homeOf({ tag: 'crossover_quest', most: false }, 'tidepool_academy', undefined, undefined)).toBe(
+    'tidepool_academy',
+  )
+  expect(homeOf({ tag: 'crossover_quest', most: false }, undefined, 'academy_saga', undefined)).toBe('crossover_quest')
+  expect(homeOf(undefined, undefined, 'academy_saga', 'tidepool_academy')).toBe('academy_saga')
+  expect(homeOf(undefined, undefined, undefined, 'tidepool_academy')).toBe('tidepool_academy')
+  expect(homeOf(undefined, undefined, undefined, undefined)).toBeUndefined()
   const votes = new Map([
     [
       'tpa',
@@ -54,42 +61,41 @@ test('a character goes home by its qualifier, then by its works, then by what ch
   expect(learnedOf(votes)).toEqual(new Map([['tpa', 'tidepool_academy']]))
 })
 
-test("a character's works choose the tag most of them carry, a tie going to the one with more posts", () => {
+test("a character's works choose the most specific tag most of them reach and that is big enough, else the tag the most of them carry", () => {
   const posts = (tag: string) =>
     new Map([
-      ['academy_saga', 9000],
+      ['academy_saga', 90000],
       ['tidepool_academy', 400],
+      ['tidepool_drama_cd', 120],
       ['crossover_quest', 50000],
     ]).get(tag) ?? 0
-  expect(
-    votedOf(
-      new Map([
-        ['tidepool_academy', 4],
-        ['crossover_quest', 1],
-      ]),
-      posts,
-    ),
-  ).toBe('tidepool_academy')
-  expect(
-    votedOf(
-      new Map([
-        ['tidepool_academy', 1],
-        ['crossover_quest', 1],
-      ]),
-      posts,
-    ),
-  ).toBe('crossover_quest')
-  expect(
-    votedOf(
-      new Map([
-        ['tidepool_academy', 2],
-        ['academy_saga', 2],
-        ['crossover_quest', 1],
-      ]),
-      posts,
-    ),
-  ).toBe('academy_saga')
-  expect(votedOf(new Map(), posts)).toBeUndefined()
+  const all = () => true
+  const work = (weight: number, ...tags: [string, number][]) => ({ weight, tags: new Map(tags) })
+  const games = [
+    work(2, ['tidepool_academy', 0], ['academy_saga', 1]),
+    work(2, ['tidepool_drama_cd', 0], ['academy_saga', 1]),
+    work(2, ['academy_saga', 0]),
+  ]
+  expect(chosenOf(games, all, posts)).toEqual({ tag: 'academy_saga', most: true })
+  const series = [
+    work(2, ['tidepool_academy', 0], ['academy_saga', 1]),
+    work(2, ['tidepool_academy', 0], ['academy_saga', 1]),
+  ]
+  expect(chosenOf(series, all, posts)).toEqual({ tag: 'tidepool_academy', most: true })
+  expect(chosenOf(series, (tag) => tag !== 'tidepool_academy', posts)).toEqual({ tag: 'academy_saga', most: true })
+  const lead = [work(3, ['tidepool_academy', 0]), work(2, ['crossover_quest', 0])]
+  expect(chosenOf(lead, all, posts)).toEqual({ tag: 'tidepool_academy', most: true })
+  const spread = [
+    work(2, ['tidepool_academy', 0]),
+    work(2, ['tidepool_academy', 0]),
+    work(2, ['crossover_quest', 0]),
+    work(2, ['tidepool_drama_cd', 0]),
+  ]
+  expect(chosenOf(spread, all, posts)).toEqual({ tag: 'tidepool_academy', most: false })
+  const even = [work(2, ['tidepool_academy', 0]), work(2, ['crossover_quest', 0])]
+  expect(chosenOf(even, all, posts)).toEqual({ tag: 'crossover_quest', most: false })
+  expect(chosenOf(even, (tag) => tag !== 'crossover_quest', posts)).toEqual({ tag: 'tidepool_academy', most: false })
+  expect(chosenOf([work(2)], all, posts)).toBeUndefined()
 })
 
 test("a character's place in its home's cast is its best role in a work of that home, then whether a catalog knows it", () => {

@@ -76,14 +76,14 @@ export class Index {
   rank(id: string): number {
     const cached = this.ranks.get(id)
     if (cached !== undefined) return cached
-    const rows = this.union<{ rank: number; weight: number }>(
-      (s) => `SELECT rank, weight FROM ${s}.ranks WHERE entity = ?`,
-      id,
-    )
-    const weight = rows.reduce((sum, row) => sum + row.weight, 0)
-    const rank = weight > 0 ? rows.reduce((sum, row) => sum + row.rank * row.weight, 0) / weight : 0
+    const rows = this.union<{ rank: number }>((s) => `SELECT rank FROM ${s}.ranks WHERE entity = ?`, id)
+    const rank = Math.max(0, ...rows.map((row) => row.rank))
     this.ranks.set(id, rank)
     return rank
+  }
+
+  home(id: string): string | undefined {
+    return this.union<{ tag: string }>((s) => `SELECT tag FROM ${s}.homes WHERE entity = ?`, id).at(-1)?.tag
   }
 
   refs(id: string): string[] {
@@ -118,21 +118,31 @@ export class Index {
     return { id, kind, medium, names, refs: this.refs(id), works }
   }
 
+  preferred(id: string, lang: string): { text: string; kind: NameKind } | undefined {
+    return this.union<{ text: string; kind: NameKind; pref: number }>(
+      (s) => `SELECT text, kind, pref FROM ${s}.names WHERE entity = ? AND lang = ? AND pref IS NOT NULL`,
+      id,
+      lang,
+    ).sort((a, b) => a.pref - b.pref)[0]
+  }
+
   label(id: string, langs: string[] = ['ja', 'en', 'ja-Latn', 'ko']): string {
+    const primary = (kind: NameKind) => kind === 'main' || kind === 'official'
+    const chain = langs.flatMap((lang) => this.preferred(id, lang) ?? [])
     const names = this.card(id)?.names ?? []
-    const trusted = ['wikidata', 'aod', 'anidb', 'vndb']
-    for (const lang of langs) {
-      for (const source of [...trusted, undefined]) {
-        const found = names.find(
-          (n) =>
-            n.lang === lang &&
-            (n.kind === 'official' || n.kind === 'main') &&
-            (source === undefined || n.source === source),
-        )
-        if (found) return found.text
-      }
-    }
-    return names.find((n) => n.kind === 'main')?.text ?? names[0]?.text ?? id
+    return (
+      chain.find((name) => primary(name.kind))?.text ??
+      names
+        .filter((name) => primary(name.kind))
+        .sort(
+          (a, b) =>
+            Number(a.text.includes('(')) - Number(b.text.includes('(')) ||
+            Number(a.source === 'danbooru') - Number(b.source === 'danbooru'),
+        )[0]?.text ??
+      chain[0]?.text ??
+      names[0]?.text ??
+      id
+    )
   }
 
   private candidates(query: string, kind?: Kind): Map<string, Hit> {

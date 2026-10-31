@@ -2,7 +2,7 @@ import { gunzipSync } from 'node:zlib'
 import { type Kind, LAYERS, type Layer, type NameKind } from '../model.ts'
 import { flat, qualifiers } from '../text.ts'
 import { type Rows, View } from './chunks.ts'
-import { search } from './engine.ts'
+import { type Match, matchOf, search } from './engine.ts'
 import {
   ADULT,
   CHARACTER,
@@ -10,6 +10,7 @@ import {
   MAIN,
   type Manifest,
   NAME_KINDS,
+  type Name,
   parsePath,
   readManifest,
   readRows,
@@ -21,7 +22,7 @@ export interface Found {
   id: string
   kind: Kind
   label: string
-  names: { text: string; lang: string | null; kind: NameKind }[]
+  names: { text: string; lang: string | null; kind: NameKind; preferred?: true }[]
   danbooru: string[]
   works: string[]
   refs: string[]
@@ -30,6 +31,7 @@ export interface Found {
   year: number | null
   medium: string | null
   score: number
+  match: Match | null
   adult: boolean
 }
 
@@ -75,33 +77,48 @@ export function decode(path: string, bytes: Uint8Array): Rows {
   return rows
 }
 
-function label(id: string, rows: EntityRow[]): string {
-  const names = rows.flatMap((row) => row.names)
-  for (const lang of LABEL_LANGS) {
-    for (const trust of [0, 1, 2, 3, undefined]) {
-      const found = names.find(
-        (n) =>
-          n.lang === lang && (n.kind === 'official' || n.kind === 'main') && (trust === undefined || n.trust === trust),
-      )
-      if (found) return found.text
-    }
+function preferredOf(names: readonly Name[]): Map<string, Name> {
+  const out = new Map<string, Name>()
+  for (const name of names) {
+    if (name.lang === null || name.pref === null) continue
+    const known = out.get(name.lang)
+    if (!known || name.pref < (known.pref ?? Number.POSITIVE_INFINITY)) out.set(name.lang, name)
   }
-  return names.find((n) => n.kind === 'main')?.text ?? names[0]?.text ?? id
+  return out
 }
 
-function card(rows: EntityRow[], score: number, adult: boolean): Found {
+const PRIMARY: ReadonlySet<NameKind> = new Set(['main', 'official'])
+
+function label(id: string, names: readonly Name[], preferred: ReadonlyMap<string, Name>): string {
+  const chain = LABEL_LANGS.flatMap((lang) => preferred.get(lang) ?? [])
+  return (
+    chain.find((name) => PRIMARY.has(name.kind))?.text ??
+    names
+      .filter((name) => PRIMARY.has(name.kind) && name.qual === null)
+      .sort((a, b) => Number(a.text.includes('(')) - Number(b.text.includes('(')) || a.trust - b.trust)[0]?.text ??
+    chain[0]?.text ??
+    names[0]?.text ??
+    id
+  )
+}
+
+function card(rows: EntityRow[], score: number, adult: boolean, match: Match | null = null): Found {
   const head = rows[0] as EntityRow
+  const all = rows.flatMap((row) => row.names)
+  const preferred = preferredOf(all)
   const seen = new Map<string, Found['names'][number]>()
   const names: Found['names'] = []
-  for (const name of rows.flatMap((row) => row.names)) {
-    if (!SHOWN.has(name.kind)) continue
+  for (const name of all) {
+    if (!SHOWN.has(name.kind) && preferred.get(name.lang ?? '') !== name) continue
     const key = `${name.lang ?? ''}\u0000${name.text}`
     const known = seen.get(key)
     if (known) {
       if (NAME_KINDS.indexOf(name.kind) < NAME_KINDS.indexOf(known.kind)) known.kind = name.kind
+      if (preferred.get(name.lang ?? '') === name) known.preferred = true
       continue
     }
-    const shown = { text: name.text, lang: name.lang, kind: name.kind }
+    const shown: Found['names'][number] = { text: name.text, lang: name.lang, kind: name.kind }
+    if (preferred.get(name.lang ?? '') === name) shown.preferred = true
     seen.set(key, shown)
     names.push(shown)
   }
@@ -120,7 +137,7 @@ function card(rows: EntityRow[], score: number, adult: boolean): Found {
   return {
     id: head.id,
     kind: head.kind,
-    label: label(head.id, rows),
+    label: label(head.id, all, preferred),
     names,
     danbooru,
     works,
@@ -130,6 +147,7 @@ function card(rows: EntityRow[], score: number, adult: boolean): Found {
     year: rows.find((row) => row.year !== null)?.year ?? null,
     medium: rows.find((row) => row.medium !== null)?.medium ?? null,
     score,
+    match,
     adult,
   }
 }
@@ -166,7 +184,7 @@ export class Names {
       view.labels = true
       const out = hits.flatMap((hit) => {
         const rows = view.entity(hit.eid, hit.mask)
-        return rows.length > 0 ? [card(rows, hit.score, hit.adult)] : []
+        return rows.length > 0 ? [card(rows, hit.score, hit.adult, matchOf(hit.how))] : []
       })
       return view.wanted.size > 0 ? undefined : out
     })

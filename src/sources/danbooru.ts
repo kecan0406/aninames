@@ -2,7 +2,7 @@ import { rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type Entry, type Name, ref, type Source } from '../model.ts'
 import { fresh, json, sleep } from '../net.ts'
-import { hasHangul, hasKanji, qualifiers } from '../text.ts'
+import { flat, hasHangul, hasKanji, qualifiers } from '../text.ts'
 
 const HOST = (process.env.ANINAMES_DANBOORU ?? 'https://danbooru.donmai.us').replace(/\/+$/, '')
 
@@ -323,11 +323,26 @@ export default {
       yield entryOf(tag, (synonyms.get(tag.name) ?? []).sort(), wiki.get(tag.name) ?? [], owners)
     }
     const titles = new Map(Object.entries(await read<Record<string, string[]>>(raw, 'titles')))
-    for (const tag of await read<Tag[]>(raw, 'works')) {
-      if (tag.is_deprecated || META.has(tag.name)) continue
+    const works = (await read<Tag[]>(raw, 'works')).filter((tag) => !tag.is_deprecated && !META.has(tag.name))
+    const bases = new Map<string, number>()
+    for (const tag of works) {
+      const key = flat(qualifiers(display(tag.name)).base)
+      bases.set(key, (bases.get(key) ?? 0) + 1)
+    }
+    const plain = (text: string, own: string) => {
+      const { base, quals } = qualifiers(text)
+      if (quals.length === 0 || !base) return text
+      const key = flat(base)
+      const count = bases.get(key) ?? 0
+      return count === 0 || (key === own && count === 1) ? base : text
+    }
+    for (const tag of works) {
       const others = (titles.get(tag.name) ?? []).map(display).filter(usable)
-      const link = others.filter((text) => hasKana(text) || hasKanji(text))
+      const own = flat(qualifiers(display(tag.name)).base)
+      const link = [...new Set([display(tag.name), ...others].map((text) => plain(text, own)))]
       const names: Name[] = [{ text: display(tag.name), kind: 'main' }]
+      const main = plain(display(tag.name), own)
+      if (main !== display(tag.name)) names.push({ text: main, kind: 'main' })
       for (const text of others) {
         const lang = langOf(text)
         names.push(lang ? { text, lang, kind: 'synonym' } : { text, kind: 'synonym' })

@@ -141,6 +141,20 @@ interface Query {
   group: Group
   facet: Facet
   pattern: string
+  property?: string
+}
+
+type Tie = 'within' | 'basis' | 'related'
+
+const RELATIONS: Record<string, { tie: Tie; inverse?: true }> = {
+  P179: { tie: 'within' },
+  P361: { tie: 'within' },
+  P8345: { tie: 'within' },
+  P527: { tie: 'within', inverse: true },
+  P144: { tie: 'basis' },
+  P4969: { tie: 'basis', inverse: true },
+  P155: { tie: 'related' },
+  P156: { tie: 'related' },
 }
 
 function idPattern(ids: Id[]): string {
@@ -160,8 +174,6 @@ function names(predicate: string): string {
 const SITELINKS = '?item wikibase:sitelinks ?v'
 
 const ORIGIN = '?item wdt:P495/wdt:P297 ?v'
-
-const RELATIONS = ['P144', 'P4969', 'P179', 'P361', 'P527', 'P8345', 'P155', 'P156']
 
 const QUERIES: Query[] = [
   { file: 'work-ids', group: 'work', facet: 'ids', pattern: idPattern(IDS.work) },
@@ -187,11 +199,12 @@ const QUERIES: Query[] = [
   { file: 'linked-started', group: 'linked', facet: 'date', pattern: '?item wdt:P580 ?v' },
   { file: 'linked-origin', group: 'linked', facet: 'origin', pattern: ORIGIN },
   ...(['work', 'linked'] as const).flatMap((group) =>
-    RELATIONS.map((property) => ({
+    Object.keys(RELATIONS).map((property) => ({
       file: `${group}-related-${property}`,
       group,
       facet: 'related' as const,
       pattern: `?item wdt:${property} ?v`,
+      property,
     })),
   ),
 ]
@@ -367,11 +380,15 @@ interface Item {
   readings: Name[]
   works: Ref[]
   series: Ref[]
+  within: Ref[]
+  basis: Ref[]
   related: Ref[]
   origin: string[]
   rank?: number
   year?: number
 }
+
+type Inverse = [item: string, tie: Tie, from: Ref][]
 
 function named(term: Term, kind: Name['kind']): Name | undefined {
   const code = (term['xml:lang'] ?? '').toLowerCase()
@@ -383,7 +400,7 @@ function named(term: Term, kind: Name['kind']): Name | undefined {
   return lang ? { text, lang, kind } : { text, kind }
 }
 
-function gather(items: Map<string, Item>, query: Query, rows: Record<string, Term>[]): void {
+function gather(items: Map<string, Item>, query: Query, rows: Record<string, Term>[], inverse: Inverse): void {
   const ids = IDS[kindOf(query.group)]
   for (const row of rows) {
     const q = qid(row.item)
@@ -401,6 +418,8 @@ function gather(items: Map<string, Item>, query: Query, rows: Record<string, Ter
         readings: [],
         works: [],
         series: [],
+        within: [],
+        basis: [],
         related: [],
         origin: [],
       }
@@ -459,7 +478,10 @@ function gather(items: Map<string, Item>, query: Query, rows: Record<string, Ter
       }
       case 'related': {
         const other = qid(value)
-        if (other && other !== q) item.related.push(ref('wikidata', other))
+        const relation = RELATIONS[query.property ?? '']
+        if (!other || other === q || !relation) break
+        if (relation.inverse) inverse.push([other, relation.tie, ref('wikidata', q)])
+        else item[relation.tie].push(ref('wikidata', other))
         break
       }
     }
@@ -500,8 +522,10 @@ function entryOf(q: string, kind: Kind, item: Item, known?: Map<string, Item>): 
   if (works.length > 0) entry.works = works
   const series = unique(item.series)
   if (series.length > 0) entry.series = series
-  const related = unique(item.related).filter((other) => known?.has(other.slice('wikidata:'.length)))
-  if (related.length > 0) entry.related = related
+  for (const tie of ['within', 'basis', 'related'] as const) {
+    const found = unique(item[tie]).filter((other) => known?.has(other.slice('wikidata:'.length)))
+    if (found.length > 0) entry[tie] = found
+  }
   if (item.rank !== undefined) entry.rank = item.rank
   if (item.year !== undefined) entry.year = item.year
   const origin = unique(item.origin)
@@ -511,9 +535,11 @@ function entryOf(q: string, kind: Kind, item: Item, known?: Map<string, Item>): 
 
 async function* stage(raw: string): AsyncIterable<Entry> {
   const items: Record<Kind, Map<string, Item>> = { work: new Map(), character: new Map() }
+  const inverse: Inverse = []
   for (const query of QUERIES) {
-    gather(items[kindOf(query.group)], query, await rowsOf(raw, query.file))
+    gather(items[kindOf(query.group)], query, await rowsOf(raw, query.file), inverse)
   }
+  for (const [q, tie, from] of inverse) items.work.get(q)?.[tie].push(from)
   for (const [q, item] of items.character) {
     yield entryOf(q, 'character', item)
   }

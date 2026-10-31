@@ -51,6 +51,8 @@ export interface Entry {
   works?: Ref[]
   roles?: [work: Ref, role: Role][]
   series?: Ref[]
+  within?: Ref[]
+  basis?: Ref[]
   related?: Ref[]
   near?: Ref[]
   link?: string[]

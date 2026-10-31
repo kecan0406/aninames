@@ -203,6 +203,7 @@ export interface Name {
   kind: NameKind
   trust: number
   qual: string | null
+  pref: number | null
   flat: string
 }
 
@@ -239,12 +240,13 @@ function keyRow(value: unknown): KeyRow | undefined {
 
 function nameOf(value: unknown): Name | undefined {
   if (!Array.isArray(value) || value.length < 4) return undefined
-  const [text, lang, kind, trust, qual] = value
+  const [text, lang, kind, trust, qual, pref] = value
   if (typeof text !== 'string' || (lang !== null && typeof lang !== 'string')) return undefined
   const named = isCount(kind) ? NAME_KINDS[kind] : undefined
   if (!named || !isCount(trust)) return undefined
   if (qual !== undefined && qual !== null && typeof qual !== 'string') return undefined
-  return { text, lang, kind: named, trust, qual: qual ?? null, flat: flat(text) }
+  if (pref !== undefined && !isCount(pref)) return undefined
+  return { text, lang, kind: named, trust, qual: qual ?? null, pref: pref ?? null, flat: flat(text) }
 }
 
 function list<T>(value: unknown, item: (value: unknown) => T | undefined): T[] | undefined {

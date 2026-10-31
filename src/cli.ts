@@ -9,7 +9,6 @@ import { pack, unpack } from './pack.ts'
 import { probe } from './probe.ts'
 import { Index } from './search.ts'
 import { silver } from './silver.ts'
-import { slice } from './slice.ts'
 import { pick } from './sources/index.ts'
 import { rawDir, writeStage } from './stage.ts'
 
@@ -33,10 +32,6 @@ async function main(argv: string[]): Promise<void> {
       return
     case 'build':
       await build()
-      await slice(DIST)
-      return
-    case 'slice':
-      await slice(DIST)
       return
     case 'unpack':
       await unpack(DIST)
@@ -82,7 +77,7 @@ async function main(argv: string[]): Promise<void> {
     }
     default:
       throw new Error(
-        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, slice, pack, chunk, search, eval, probe, compare, silver or han`,
+        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, pack, chunk, search, eval, probe, compare, silver or han`,
       )
   }
 }
