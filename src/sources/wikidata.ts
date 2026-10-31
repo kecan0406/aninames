@@ -237,7 +237,14 @@ async function ask(endpoint: Endpoint, query: string, again = true): Promise<{ t
     throw new Error(`answered ${res.status}`)
   }
   const text = await res.text()
-  const rows = (JSON.parse(text) as Results).results?.bindings?.length
+  let rows: number | undefined
+  try {
+    rows = (JSON.parse(text) as Results).results?.bindings?.length
+  } catch (error) {
+    if (!again) throw error
+    console.log(`wikidata: ${endpoint.name} sent an answer cut short; asking again`)
+    return ask(endpoint, query, false)
+  }
   if (rows === undefined) {
     throw new Error('answered without results')
   }
