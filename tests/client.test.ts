@@ -78,7 +78,7 @@ test('range lookups find equal keys that straddle chunk files', async () => {
   }
 })
 
-test('tagged finds the entities of a Danbooru tag whatever its punctuation and qualifier, with their refs', async () => {
+test('tagged finds the entities of a Danbooru tag whatever its punctuation and qualifier, with their refs and origin', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
   try {
     const tag = new Writer(join(dir, 'core', 'tag'), 4096)
@@ -117,6 +117,8 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
         0,
         0,
         ['anilist:9', 'tmdb:tv/7'],
+        null,
+        ['JP'],
       ],
     ] as const
     for (const row of rows) entity.add([...row], row[1], row[0])
@@ -129,6 +131,7 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
     const works = await names.tagged('Starfall-Harbor', { kind: 'work' })
     expect(works.map((found) => found.id)).toEqual(['w/x:2', 'w/x:0'])
     expect(works[0]?.refs).toEqual(['anilist:9', 'tmdb:tv/7'])
+    expect(works.map((found) => found.origin)).toEqual([['JP'], []])
     expect(works[0]?.names).toEqual([{ text: 'Starfall Harbor', lang: 'en', kind: 'official' }])
     expect((await names.tagged('pip_(anything)')).map((found) => found.id)).toEqual(['c/x:1'])
     expect(await names.tagged('pip', { kind: 'work' })).toEqual([])

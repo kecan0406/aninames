@@ -53,6 +53,7 @@ export interface Entry {
   adult?: boolean
   type?: string
   year?: number
+  origin?: string[]
 }
 
 export interface Source {

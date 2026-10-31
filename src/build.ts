@@ -945,7 +945,9 @@ function schema(db: Database): void {
   db.run('PRAGMA journal_mode = OFF')
   db.run('PRAGMA synchronous = OFF')
   db.run('CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
-  db.run('CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT NOT NULL, medium TEXT, type TEXT, year INTEGER)')
+  db.run(
+    'CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT NOT NULL, medium TEXT, type TEXT, year INTEGER, origin TEXT)',
+  )
   db.run('CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL, rank REAL)')
   db.run(
     'CREATE TABLE names (rowid INTEGER PRIMARY KEY, entity TEXT NOT NULL, ekind TEXT NOT NULL, text TEXT NOT NULL, lang TEXT, kind TEXT NOT NULL, source TEXT NOT NULL, flat TEXT NOT NULL, latin TEXT NOT NULL, qual TEXT, variant INTEGER NOT NULL, support INTEGER NOT NULL)',
@@ -1018,7 +1020,9 @@ export async function build(): Promise<void> {
     await rm(path, { force: true })
     const db = new Database(path, { create: true })
     schema(db)
-    const insertEntity = db.prepare('INSERT INTO entities (id, kind, medium, type, year) VALUES (?, ?, ?, ?, ?)')
+    const insertEntity = db.prepare(
+      'INSERT INTO entities (id, kind, medium, type, year, origin) VALUES (?, ?, ?, ?, ?, ?)',
+    )
     const insertRef = db.prepare('INSERT INTO refs (entity, ref, rank) VALUES (?, ?, ?)')
     const insertName = db.prepare(
       'INSERT INTO names (entity, ekind, text, lang, kind, source, flat, latin, qual, variant, support) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid',
@@ -1038,12 +1042,14 @@ export async function build(): Promise<void> {
           const first = entity.members.find((m) => m.layer === layer && !m.entry.attach)?.entry
           const typed = entity.members.find((m) => m.entry.type)?.entry
           const dated = entity.members.find((m) => m.entry.year)?.entry
+          const origin = [...new Set(entity.members.flatMap((m) => m.entry.origin ?? []))]
           insertEntity.run(
             entity.id,
             entity.kind,
             mediumOf(entity),
             typed?.type ?? first?.type ?? null,
             dated?.year ?? null,
+            origin.length > 0 ? origin.join(' ') : null,
           )
         }
         const refs = new Map<string, number | null>()

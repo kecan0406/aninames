@@ -219,6 +219,7 @@ export interface EntityRow {
   adult: boolean
   refs: string[]
   home: string | null
+  origin: string[]
 }
 
 const isInt = (value: unknown): value is number => Number.isSafeInteger(value)
@@ -265,10 +266,26 @@ const eidOf = (value: unknown): number | undefined => (isCount(value) ? value : 
 const refOf = (value: unknown): string | undefined =>
   typeof value === 'string' && value.indexOf(':') > 0 ? value : undefined
 
+const countryOf = (value: unknown): string | undefined =>
+  typeof value === 'string' && /^[A-Z]{2}$/.test(value) ? value : undefined
+
 function entityRow(value: unknown): EntityRow | undefined {
   if (!Array.isArray(value) || value.length < 10) return undefined
-  const [eid, id, rawNames, rawTags, rawWorks, rawReach, rank, standing, extra, adult, rawRefs = [], home = null] =
-    value
+  const [
+    eid,
+    id,
+    rawNames,
+    rawTags,
+    rawWorks,
+    rawReach,
+    rank,
+    standing,
+    extra,
+    adult,
+    rawRefs = [],
+    home = null,
+    rawOrigin = [],
+  ] = value
   if (!isCount(eid) || typeof id !== 'string') return undefined
   const kind: Kind | undefined = id.startsWith('w/') ? 'work' : id.startsWith('c/') ? 'character' : undefined
   if (!kind || !isInt(rank) || !isInt(standing) || !isInt(extra)) return undefined
@@ -277,8 +294,10 @@ function entityRow(value: unknown): EntityRow | undefined {
   const works = list(rawWorks, workOf)
   const reach = list(rawReach, eidOf)
   const refs = list(rawRefs, refOf)
-  if (!names || !danbooru || !works || !reach || !refs || (home !== null && typeof home !== 'string')) return undefined
-  return { eid, id, kind, names, danbooru, works, reach, rank, standing, extra, adult: adult === 1, refs, home }
+  const origin = list(rawOrigin, countryOf)
+  if (!names || !danbooru || !works || !reach || !refs || !origin) return undefined
+  if (home !== null && typeof home !== 'string') return undefined
+  return { eid, id, kind, names, danbooru, works, reach, rank, standing, extra, adult: adult === 1, refs, home, origin }
 }
 
 export function readRows(table: Table, value: unknown): KeyRow[] | EntityRow[] | undefined {

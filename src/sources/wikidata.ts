@@ -123,7 +123,18 @@ const LABEL_LANGS = [
 
 type Group = Kind | 'linked'
 
-type Facet = 'ids' | 'label' | 'alias' | 'sitelinks' | 'date' | 'kana' | 'native' | 'works' | 'series' | 'related'
+type Facet =
+  | 'ids'
+  | 'label'
+  | 'alias'
+  | 'sitelinks'
+  | 'date'
+  | 'origin'
+  | 'kana'
+  | 'native'
+  | 'works'
+  | 'series'
+  | 'related'
 
 interface Query {
   file: string
@@ -148,6 +159,8 @@ function names(predicate: string): string {
 
 const SITELINKS = '?item wikibase:sitelinks ?v'
 
+const ORIGIN = '?item wdt:P495/wdt:P297 ?v'
+
 const RELATIONS = ['P144', 'P4969', 'P179', 'P361', 'P527', 'P8345', 'P155', 'P156']
 
 const QUERIES: Query[] = [
@@ -157,6 +170,7 @@ const QUERIES: Query[] = [
   { file: 'work-sitelinks', group: 'work', facet: 'sitelinks', pattern: SITELINKS },
   { file: 'work-published', group: 'work', facet: 'date', pattern: '?item wdt:P577 ?v' },
   { file: 'work-started', group: 'work', facet: 'date', pattern: '?item wdt:P580 ?v' },
+  { file: 'work-origin', group: 'work', facet: 'origin', pattern: ORIGIN },
   { file: 'character-ids', group: 'character', facet: 'ids', pattern: idPattern(IDS.character) },
   { file: 'character-labels', group: 'character', facet: 'label', pattern: names('rdfs:label') },
   { file: 'character-aliases', group: 'character', facet: 'alias', pattern: names('skos:altLabel') },
@@ -171,6 +185,7 @@ const QUERIES: Query[] = [
   { file: 'linked-sitelinks', group: 'linked', facet: 'sitelinks', pattern: SITELINKS },
   { file: 'linked-published', group: 'linked', facet: 'date', pattern: '?item wdt:P577 ?v' },
   { file: 'linked-started', group: 'linked', facet: 'date', pattern: '?item wdt:P580 ?v' },
+  { file: 'linked-origin', group: 'linked', facet: 'origin', pattern: ORIGIN },
   ...(['work', 'linked'] as const).flatMap((group) =>
     RELATIONS.map((property) => ({
       file: `${group}-related-${property}`,
@@ -353,6 +368,7 @@ interface Item {
   works: Ref[]
   series: Ref[]
   related: Ref[]
+  origin: string[]
   rank?: number
   year?: number
 }
@@ -377,7 +393,17 @@ function gather(items: Map<string, Item>, query: Query, rows: Record<string, Ter
     }
     let item = items.get(q)
     if (!item) {
-      item = { refs: [], labels: [], native: [], aliases: [], readings: [], works: [], series: [], related: [] }
+      item = {
+        refs: [],
+        labels: [],
+        native: [],
+        aliases: [],
+        readings: [],
+        works: [],
+        series: [],
+        related: [],
+        origin: [],
+      }
       items.set(q, item)
     }
     switch (query.facet) {
@@ -414,6 +440,11 @@ function gather(items: Map<string, Item>, query: Query, rows: Record<string, Ter
       case 'date': {
         const year = Number(value.value.match(/^(-?\d{1,4})(?:-|$)/)?.[1])
         if (Number.isInteger(year) && year > 0) item.year = Math.min(item.year ?? year, year)
+        break
+      }
+      case 'origin': {
+        const code = value.value.trim().toUpperCase()
+        if (/^[A-Z]{2}$/.test(code)) item.origin.push(code)
         break
       }
       case 'works': {
@@ -473,6 +504,8 @@ function entryOf(q: string, kind: Kind, item: Item, known?: Map<string, Item>): 
   if (related.length > 0) entry.related = related
   if (item.rank !== undefined) entry.rank = item.rank
   if (item.year !== undefined) entry.year = item.year
+  const origin = unique(item.origin)
+  if (origin.length > 0) entry.origin = origin
   return entry
 }
 

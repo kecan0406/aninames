@@ -323,7 +323,8 @@ SELECT id,
     (SELECT work FROM works WHERE character = ids.id GROUP BY work ORDER BY min(rowid))) AS works,
   (SELECT json_group_array(ref) FROM
     (SELECT ref FROM refs WHERE entity = ids.id AND ref NOT GLOB 'danbooru:*' GROUP BY ref ORDER BY ref)) AS refs,
-  (SELECT tag FROM homes WHERE entity = ids.id) AS home
+  (SELECT tag FROM homes WHERE entity = ids.id) AS home,
+  (SELECT origin FROM entities WHERE id = ids.id) AS origin
 FROM ids ORDER BY id`
 
 type NameSource = [text: string, lang: string | null, kind: NameKind, source: string, qual: string | null]
@@ -334,9 +335,18 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
   const links = score.related.get(layer) ?? new Map<number, number[]>()
   const order = (at: number) => 25 * (score.standing[at] ?? 0) + 1000 * (score.extra[at] ?? 0)
   for (const row of db
-    .query<{ id: string; names: string; tags: string; works: string; refs: string; home: string | null }, []>(
-      ENTITY_SQL,
-    )
+    .query<
+      {
+        id: string
+        names: string
+        tags: string
+        works: string
+        refs: string
+        home: string | null
+        origin: string | null
+      },
+      []
+    >(ENTITY_SQL)
     .iterate()) {
     const at = eid.get(row.id)
     if (at === undefined) continue
@@ -370,6 +380,7 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
         score.adult[at],
         JSON.parse(row.refs) as string[],
         row.home,
+        ...(row.origin ? [row.origin.split(' ')] : []),
       ],
       row.id,
       at,

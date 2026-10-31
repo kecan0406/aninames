@@ -26,6 +26,7 @@ export interface Found {
   works: string[]
   refs: string[]
   home: string | null
+  origin: string[]
   score: number
   adult: boolean
 }
@@ -113,7 +114,20 @@ function card(rows: EntityRow[], score: number, adult: boolean): Found {
   const works = head.kind === 'character' ? [...new Set(rows.flatMap((row) => row.works.map(([, id]) => id)))] : []
   const refs = [...new Set(rows.flatMap((row) => row.refs))].sort()
   const home = rows.findLast((row) => row.home !== null)?.home ?? null
-  return { id: head.id, kind: head.kind, label: label(head.id, rows), names, danbooru, works, refs, home, score, adult }
+  const origin = [...new Set(rows.flatMap((row) => row.origin))]
+  return {
+    id: head.id,
+    kind: head.kind,
+    label: label(head.id, rows),
+    names,
+    danbooru,
+    works,
+    refs,
+    home,
+    origin,
+    score,
+    adult,
+  }
 }
 
 interface State {
