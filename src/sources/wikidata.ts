@@ -36,6 +36,7 @@ interface Id {
   property: string
   only?: string
   gate?: string
+  finds?: false
   to(value: string): Ref | undefined
 }
 
@@ -58,6 +59,8 @@ const IDS: Record<Kind, Id[]> = {
     { property: 'P4087', to: numeric('mal', 'manga/') },
     { property: 'P8731', to: numeric('anilist', 'manga/') },
     { property: 'P3180', only: 'v', to: vndb('v') },
+    { property: 'P4983', finds: false, to: numeric('tmdb', 'tv/') },
+    { property: 'P4947', finds: false, to: numeric('tmdb', 'movie/') },
   ],
   character: [
     { property: 'P4085', to: numeric('mal') },
@@ -174,10 +177,11 @@ function kindOf(group: Group): Kind {
 }
 
 function itemSet(ids: Id[], endpoint: Endpoint): string {
-  const branches = ids.map((id, at) => {
+  const branches = ids.flatMap((id, at) => {
+    if (id.finds === false) return []
     const only = id.only ? ` FILTER(STRSTARTS(?id${at}, '${id.only}'))` : ''
     const gate = id.gate ? ` . ?item ${id.gate}${endpoint.forward}` : ''
-    return `{ ?item wdt:${id.property} ?id${at}${only}${gate} }`
+    return [`{ ?item wdt:${id.property} ?id${at}${only}${gate} }`]
   })
   return `{ SELECT DISTINCT ?item WHERE { ${branches.join(' UNION ')} } }`
 }

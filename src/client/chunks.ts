@@ -1,5 +1,14 @@
 import type { Layer } from '../model.ts'
-import { chunkPath, type EntityRow, type KeyRow, type KeyTable, type Manifest, present, type Table } from './format.ts'
+import {
+  chunkPath,
+  type EntityRow,
+  type KeyRow,
+  type KeyTable,
+  type Manifest,
+  present,
+  type Spans,
+  type Table,
+} from './format.ts'
 import { compare } from './order.ts'
 
 export type Rows = KeyRow[] | EntityRow[]
@@ -56,11 +65,17 @@ export class View {
   }
 
   keys(table: KeyTable, range: Range): KeyRow[] {
-    return this.layers.flatMap((layer) => this.keysIn(layer, table, range))
+    return this.layers.flatMap((layer) =>
+      this.keysIn(layer, table, this.manifest.layers.get(layer)?.keys[table], range),
+    )
   }
 
-  private keysIn(layer: Layer, table: KeyTable, range: Range): KeyRow[] {
-    const spans = this.manifest.layers.get(layer)?.keys[table]
+  tagged(key: string, prefix: boolean): KeyRow[] {
+    const range = { low: key, high: prefix ? `${key}\u{10FFFF}` : key }
+    return this.layers.flatMap((layer) => this.keysIn(layer, 'tag', this.manifest.layers.get(layer)?.tag, range))
+  }
+
+  private keysIn(layer: Layer, table: KeyTable | 'tag', spans: Spans | undefined, range: Range): KeyRow[] {
     if (!spans) return []
     const { low, high, open = false, limit = Number.POSITIVE_INFINITY, spans: most = Number.POSITIVE_INFINITY } = range
     const start = Math.max(

@@ -1,17 +1,29 @@
 import { gunzipSync } from 'node:zlib'
 import { type Kind, LAYERS, type Layer, type NameKind } from '../model.ts'
+import { flat, qualifiers } from '../text.ts'
 import { type Rows, View } from './chunks.ts'
 import { search } from './engine.ts'
-import { type EntityRow, type Manifest, parsePath, readManifest, readRows } from './format.ts'
+import {
+  ADULT,
+  CHARACTER,
+  type EntityRow,
+  MAIN,
+  type Manifest,
+  NAME_KINDS,
+  parsePath,
+  readManifest,
+  readRows,
+} from './format.ts'
 import { Missing, type Source } from './source.ts'
 
 export interface Found {
   id: string
   kind: Kind
   label: string
-  names: { text: string; lang: string | null }[]
+  names: { text: string; lang: string | null; kind: NameKind }[]
   danbooru: string[]
   works: string[]
+  refs: string[]
   score: number
   adult: boolean
 }
@@ -74,13 +86,19 @@ function label(id: string, rows: EntityRow[]): string {
 
 function card(rows: EntityRow[], score: number, adult: boolean): Found {
   const head = rows[0] as EntityRow
-  const seen = new Set<string>()
+  const seen = new Map<string, Found['names'][number]>()
   const names: Found['names'] = []
   for (const name of rows.flatMap((row) => row.names)) {
+    if (!SHOWN.has(name.kind)) continue
     const key = `${name.lang ?? ''}\u0000${name.text}`
-    if (!SHOWN.has(name.kind) || seen.has(key)) continue
-    seen.add(key)
-    names.push({ text: name.text, lang: name.lang })
+    const known = seen.get(key)
+    if (known) {
+      if (NAME_KINDS.indexOf(name.kind) < NAME_KINDS.indexOf(known.kind)) known.kind = name.kind
+      continue
+    }
+    const shown = { text: name.text, lang: name.lang, kind: name.kind }
+    seen.set(key, shown)
+    names.push(shown)
   }
   const posts = new Map<string, number | null>()
   for (const [tag, count] of rows.flatMap((row) => row.danbooru)) {
@@ -91,7 +109,8 @@ function card(rows: EntityRow[], score: number, adult: boolean): Found {
     .sort((a, b) => (b.count ?? -1) - (a.count ?? -1) || a.at - b.at)
     .map((entry) => entry.tag)
   const works = head.kind === 'character' ? [...new Set(rows.flatMap((row) => row.works.map(([, id]) => id)))] : []
-  return { id: head.id, kind: head.kind, label: label(head.id, rows), names, danbooru, works, score, adult }
+  const refs = [...new Set(rows.flatMap((row) => row.refs))].sort()
+  return { id: head.id, kind: head.kind, label: label(head.id, rows), names, danbooru, works, refs, score, adult }
 }
 
 interface State {
@@ -139,6 +158,33 @@ export class Names {
       const out = wanted.flatMap((id) => {
         const rows = view.byId(id)
         return rows.length > 0 ? [card(rows, 0, (rows[0] as EntityRow).adult)] : []
+      })
+      return view.wanted.size > 0 ? undefined : out
+    })
+  }
+
+  tagged(
+    tag: string,
+    options: { kind?: Kind; adult?: boolean; prefix?: boolean; signal?: AbortSignal } = {},
+  ): Promise<Found[]> {
+    const { kind, adult = true, prefix = false, signal } = options
+    const key = flat(qualifiers(tag).base)
+    return this.#run(signal, (view) => {
+      if (!key) return []
+      const best = new Map<number, { posts: number; mask: number; flags: number; standing: number }>()
+      for (const [, eid, posts, flags, , standing] of view.tagged(key, prefix)) {
+        if (kind && (flags & CHARACTER ? 'character' : 'work') !== kind) continue
+        if (!adult && flags & ADULT) continue
+        const known = best.get(eid)
+        const mask = flags & ~(CHARACTER | MAIN | ADULT)
+        if (!known || posts > known.posts) best.set(eid, { posts, mask: mask | (known?.mask ?? 0), flags, standing })
+        else known.mask |= mask
+      }
+      const order = [...best].sort(([a, x], [b, y]) => y.posts - x.posts || y.standing - x.standing || a - b)
+      view.labels = true
+      const out = order.flatMap(([eid, hit]) => {
+        const rows = view.entity(eid, hit.mask)
+        return rows.length > 0 ? [card(rows, 0, (hit.flags & ADULT) !== 0)] : []
       })
       return view.wanted.size > 0 ? undefined : out
     })

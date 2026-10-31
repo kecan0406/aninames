@@ -43,6 +43,7 @@ const STRENGTH: Namespace[] = [
   'livechart',
   'simkl',
   'animecountdown',
+  'tmdb',
   'kowiki',
   'anissia',
 ]

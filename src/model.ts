@@ -20,6 +20,7 @@ export type Namespace =
   | 'livechart'
   | 'simkl'
   | 'animecountdown'
+  | 'tmdb'
   | 'vndb'
   | 'bangumi'
   | 'danbooru'

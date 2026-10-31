@@ -8,7 +8,9 @@ export const KEY_TABLES = ['flat', 'latin', 'sound', 'part', 'initial'] as const
 
 export type KeyTable = (typeof KEY_TABLES)[number]
 
-export type Table = KeyTable | 'entity'
+export const TABLES = [...KEY_TABLES, 'tag', 'entity'] as const
+
+export type Table = (typeof TABLES)[number]
 
 export const NAME_KINDS: readonly NameKind[] = [
   'main',
@@ -39,7 +41,7 @@ export function chunkPath(layer: Layer, table: Table, hash: string): string {
   return `${layer}/${table}/${hash}.json.gz`
 }
 
-const PATH = new RegExp(`^(${LAYERS.join('|')})/(${[...KEY_TABLES, 'entity'].join('|')})/([0-9a-f]{12})\\.json\\.gz$`)
+const PATH = new RegExp(`^(${LAYERS.join('|')})/(${TABLES.join('|')})/([0-9a-f]{12})\\.json\\.gz$`)
 
 export function parsePath(path: string): { layer: Layer; table: Table; hash: string } | undefined {
   const match = PATH.exec(path)
@@ -87,6 +89,7 @@ export interface EntitySpans extends Spans {
 
 export interface LayerSpans {
   keys: Record<KeyTable, Spans>
+  tag: Spans | undefined
   entity: EntitySpans
 }
 
@@ -135,6 +138,11 @@ function unpack(value: unknown, where: string, numbered: boolean): EntitySpans {
   return out
 }
 
+function spansOf(value: unknown, where: string): Spans {
+  const { bounds, files } = unpack(value, where, false)
+  return { bounds, files }
+}
+
 export function readManifest(text: string): Manifest {
   let value: unknown
   try {
@@ -156,11 +164,9 @@ export function readManifest(text: string): Manifest {
     if (tables === undefined) continue
     if (!isObject(tables)) throw bad(`layer ${layer} is malformed`)
     const keys = {} as Record<KeyTable, Spans>
-    for (const table of KEY_TABLES) {
-      const { bounds, files } = unpack(tables[table], `${layer}/${table}`, false)
-      keys[table] = { bounds, files }
-    }
-    layers.set(layer, { keys, entity: unpack(tables.entity, `${layer}/entity`, true) })
+    for (const table of KEY_TABLES) keys[table] = spansOf(tables[table], `${layer}/${table}`)
+    const tag = tables.tag === undefined ? undefined : spansOf(tables.tag, `${layer}/tag`)
+    layers.set(layer, { keys, tag, entity: unpack(tables.entity, `${layer}/entity`, true) })
   }
   if (!layers.has('core')) throw bad('it has no core layer')
   return { built, layers }
@@ -170,6 +176,7 @@ export function manifestPaths(manifest: Manifest): Set<string> {
   const paths = new Set<string>()
   for (const [layer, spans] of manifest.layers) {
     for (const table of KEY_TABLES) for (const hash of spans.keys[table].files) paths.add(chunkPath(layer, table, hash))
+    for (const hash of spans.tag?.files ?? []) paths.add(chunkPath(layer, 'tag', hash))
     for (const hash of spans.entity.files) paths.add(chunkPath(layer, 'entity', hash))
   }
   return paths
@@ -206,6 +213,7 @@ export interface EntityRow {
   standing: number
   extra: number
   adult: boolean
+  refs: string[]
 }
 
 const isInt = (value: unknown): value is number => Number.isSafeInteger(value)
@@ -249,9 +257,12 @@ const workOf = (value: unknown): [number, string] | undefined =>
 
 const eidOf = (value: unknown): number | undefined => (isCount(value) ? value : undefined)
 
+const refOf = (value: unknown): string | undefined =>
+  typeof value === 'string' && value.indexOf(':') > 0 ? value : undefined
+
 function entityRow(value: unknown): EntityRow | undefined {
   if (!Array.isArray(value) || value.length < 10) return undefined
-  const [eid, id, rawNames, rawTags, rawWorks, rawReach, rank, standing, extra, adult] = value
+  const [eid, id, rawNames, rawTags, rawWorks, rawReach, rank, standing, extra, adult, rawRefs = []] = value
   if (!isCount(eid) || typeof id !== 'string') return undefined
   const kind: Kind | undefined = id.startsWith('w/') ? 'work' : id.startsWith('c/') ? 'character' : undefined
   if (!kind || !isInt(rank) || !isInt(standing) || !isInt(extra)) return undefined
@@ -259,8 +270,9 @@ function entityRow(value: unknown): EntityRow | undefined {
   const danbooru = list(rawTags, tagOf)
   const works = list(rawWorks, workOf)
   const reach = list(rawReach, eidOf)
-  if (!names || !danbooru || !works || !reach) return undefined
-  return { eid, id, kind, names, danbooru, works, reach, rank, standing, extra, adult: adult === 1 }
+  const refs = list(rawRefs, refOf)
+  if (!names || !danbooru || !works || !reach || !refs) return undefined
+  return { eid, id, kind, names, danbooru, works, reach, rank, standing, extra, adult: adult === 1, refs }
 }
 
 export function readRows(table: Table, value: unknown): KeyRow[] | EntityRow[] | undefined {

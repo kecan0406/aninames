@@ -39,7 +39,7 @@ Derived scores (popularity, standing, flags) are the only cross-layer values a f
 - `core` — CC0 and ODbL: Wikidata, anime-offline-database (cedya77's continuation), VNDB. The built `core.sqlite` is ODbL.
 - `kowiki` — CC BY-SA 4.0: Korean Wikipedia article titles and redirects.
 - `unlicensed` — sources that state no license or whose data comes from sites that state none: AniDB titles, Bangumi, Anissia, Danbooru. Kept in its own file so a user can leave it out.
-- Namuwiki is not used (CC BY-NC-SA, robots.txt forbids it). AniList and TMDB terms forbid storing their data; pixiv forbids crawlers. None of them is a source.
+- Namuwiki is not used (CC BY-NC-SA, robots.txt forbids it). AniList and TMDB terms forbid storing their data; pixiv forbids crawlers. None of them is a source: their ids on a work come from Wikidata and anime-offline-database.
 
 ## Conventions
 

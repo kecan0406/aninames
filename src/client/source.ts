@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { USER_AGENT } from '../model.ts'
-import { KEY_TABLES, manifestPaths, parsePath, readManifest } from './format.ts'
+import { manifestPaths, parsePath, readManifest, TABLES } from './format.ts'
 
 export interface Source {
   manifest(signal?: AbortSignal): Promise<string>
@@ -119,7 +119,7 @@ async function put(path: string, data: string | Uint8Array): Promise<void> {
 async function prune(dir: string, text: string): Promise<void> {
   const named = manifestPaths(readManifest(text))
   for (const layer of await readdir(dir).catch(() => [])) {
-    for (const table of [...KEY_TABLES, 'entity']) {
+    for (const table of TABLES) {
       const folder = join(dir, layer, table)
       for (const file of await readdir(folder).catch(() => [])) {
         const path = `${layer}/${table}/${file}`
