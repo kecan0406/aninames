@@ -114,11 +114,12 @@ async function homes(index: Index): Promise<void> {
     const [tag = '', want = ''] = line.split('\t')
     const id = index.resolve(`danbooru:${tag}`, 'character')
     const found = id ? index.home(id) : undefined
+    const listed = found === want || (id !== undefined && index.copyrights(id).includes(want))
     if (!id) tally.unresolved++
-    else if (found === want) tally.right++
+    else if (listed) tally.right++
     else if (found) tally.wrong++
     else tally.none++
-    if (found !== want) misses.push(`${tag}: ${id ? (found ?? 'no home') : 'not found'} (want ${want})`)
+    if (!listed) misses.push(`${tag}: ${id ? (found ?? 'no home') : 'not found'} (want ${want})`)
   }
   console.log(
     `\nhomes of ttheme's commons characters (not counted): ${tally.right} right, ${tally.wrong} wrong, ${tally.none} without one, ${tally.unresolved} not found`,

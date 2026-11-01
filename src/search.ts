@@ -82,6 +82,12 @@ export class Index {
     return rank
   }
 
+  copyrights(id: string): string[] {
+    return this.union<{ tag: string }>((s) => `SELECT tag FROM ${s}.copyrights WHERE entity = ?`, id).map(
+      (row) => row.tag,
+    )
+  }
+
   home(id: string): string | undefined {
     return this.union<{ tag: string }>((s) => `SELECT tag FROM ${s}.homes WHERE entity = ?`, id).at(-1)?.tag
   }

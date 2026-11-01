@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { type Copyrights, closestWork, type Drawn, drawnOf, ownersOf, readCopyrights } from './copyrights.ts'
 import { alike, levelsOf, tiesOf, upward, wordsOf } from './graph.ts'
 import { type Appearance, type Choice, chosenOf, FLOOR, homeOf, learnedOf, tierOf, weightOf } from './homes.ts'
 import {
@@ -83,8 +84,11 @@ interface Entity {
   members: Staged[]
 }
 
-function resolveEntities(staged: Staged[]): { union: Union; entities: Map<string, Entity>; dropped: number } {
-  const union = link(staged)
+function resolveEntities(
+  staged: Staged[],
+  copyrights: Copyrights,
+): { union: Union; entities: Map<string, Entity>; dropped: number } {
+  const union = link(staged, false, copyrights)
   const entities = new Map<string, Entity>()
   let dropped = 0
   for (const s of staged) {
@@ -402,6 +406,7 @@ interface Home {
   tag: string
   posts: number | null
   tier: number
+  also: string[]
 }
 
 const TAG = 'danbooru:'
@@ -431,6 +436,7 @@ function homesOf(
   links: ReadonlyMap<string, ReadonlySet<string>>,
   families: ReadonlyMap<string, number | null>,
   spread: ReadonlyMap<string, ReadonlySet<string>>,
+  copyrights: Copyrights,
 ): Map<string, Home> {
   const workRoot = (ref: string) => {
     const key = node('work', ref)
@@ -514,6 +520,7 @@ function homesOf(
     choice: Choice | undefined
     posts: number | null
     roles: Map<string, number>
+    drawn: Drawn | undefined
   }[] = []
   const learning = new Map<string, Map<string, number>>()
   for (const [root, entity] of entities) {
@@ -549,9 +556,13 @@ function homesOf(
       return best === null || count === null || count === undefined || count >= FLOOR * best
     }
     const choice = chosenOf(appearances, fits, postsOf)
-    if (quals.length === 0 && !choice) continue
+    const drawn = drawnOf(
+      tagged.map(([tag]) => tag),
+      copyrights,
+    )
+    if (quals.length === 0 && !choice && !drawn) continue
     const voted = new Set(appearances.flatMap((appearance) => [...appearance.tags.keys()]))
-    chosen.push({ id: entity.id, quals, voted, choice, posts: best, roles })
+    chosen.push({ id: entity.id, quals, voted, choice, posts: best, roles, drawn })
     const qual = quals[0]
     const found = choice?.tag
     if (qual && found) {
@@ -570,15 +581,17 @@ function homesOf(
     for (const tag of tagsUp(root).keys()) heads.set(tag, Math.max(heads.get(tag) ?? 0, count))
   }
   const homes = new Map<string, Home>()
-  for (const { id, quals, voted, choice, posts: count, roles } of chosen) {
+  for (const { id, quals, voted, choice, posts: count, roles, drawn } of chosen) {
     const named = quals.map((qual) => direct.get(qual)).find(Boolean)
     const taught = quals
       .map((qual) => learned.get(qual))
       .find((tag) => tag !== undefined && (voted.size === 0 || voted.has(tag)))
-    const tag = homeOf(choice, named, taught)
+    const closest = drawn && closestWork(drawn, copyrights.sizes)
+    const tag = closest ?? homeOf(choice, named, taught)
     if (!tag) continue
     const size = (work: string) => (tagsUp(work).has(tag) ? (collected.get(work) ?? 0) : undefined)
-    homes.set(id, { tag, posts: count, tier: tierOf(roles, size, heads.get(tag) ?? 0) })
+    const also = drawn ? ownersOf(drawn, tag) : []
+    homes.set(id, { tag, posts: count, tier: tierOf(roles, size, heads.get(tag) ?? 0), also })
   }
   return homes
 }
@@ -736,6 +749,7 @@ function schema(db: Database): void {
   db.run('CREATE TABLE ranks (entity TEXT PRIMARY KEY, rank REAL NOT NULL)')
   db.run('CREATE TABLE adults (entity TEXT PRIMARY KEY)')
   db.run('CREATE TABLE homes (entity TEXT PRIMARY KEY, tag TEXT NOT NULL, posts INTEGER, tier INTEGER NOT NULL)')
+  db.run('CREATE TABLE copyrights (entity TEXT NOT NULL, tag TEXT NOT NULL)')
 }
 
 function indexes(db: Database): void {
@@ -778,7 +792,8 @@ export function adultCharactersOf(
 export async function build(): Promise<void> {
   const started = performance.now()
   const { all: staged, sources } = await readAll()
-  const { union, entities, dropped } = resolveEntities(staged)
+  const copyrights = await readCopyrights()
+  const { union, entities, dropped } = resolveEntities(staged, copyrights)
   const titles = workTitles(union, staged)
   const links = linksOf(union, entities)
   const { attached, missed, spread } = attachEntries(union, staged, entities, links, titles)
@@ -788,7 +803,7 @@ export async function build(): Promise<void> {
   )
   const families = new Map<string, number | null>()
   for (const s of staged) if (s.entry.family) families.set(s.entry.id.slice(TAG.length), s.entry.rank ?? null)
-  const homes = homesOf(union, entities, parents, links, families, spread)
+  const homes = homesOf(union, entities, parents, links, families, spread, copyrights)
   console.log(`build: ${homes.size} characters have a home tag`)
   const byRoot = new Map<string, string>()
   for (const [root, entity] of entities) byRoot.set(root, entity.id)
@@ -828,6 +843,7 @@ export async function build(): Promise<void> {
     const insertRank = db.prepare('INSERT INTO ranks (entity, rank) VALUES (?, ?)')
     const insertAdult = db.prepare('INSERT INTO adults (entity) VALUES (?)')
     const insertHome = db.prepare('INSERT INTO homes (entity, tag, posts, tier) VALUES (?, ?, ?, ?)')
+    const insertCopyright = db.prepare('INSERT INTO copyrights (entity, tag) VALUES (?, ?)')
     let nameCount = 0
     db.transaction(() => {
       for (const [root, entity] of entities) {
@@ -901,7 +917,12 @@ export async function build(): Promise<void> {
           if ([...key].length >= 2) insertInitials.run(inserted.rowid, row.entity, key)
         }
       }
-      if (layer === SPINE) for (const [id, home] of homes) insertHome.run(id, home.tag, home.posts, home.tier)
+      if (layer === SPINE) {
+        for (const [id, home] of homes) {
+          insertHome.run(id, home.tag, home.posts, home.tier)
+          for (const tag of home.also) insertCopyright.run(id, tag)
+        }
+      }
       const meta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)')
       meta.run('layer', layer)
       meta.run('built', new Date().toISOString())

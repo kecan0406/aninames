@@ -1,6 +1,8 @@
 import type { Staged } from './build.ts'
+import { apart, type Copyrights, type Drawn, NO_COPYRIGHTS } from './copyrights.ts'
 import { tiesOf } from './graph.ts'
 import { foldHan } from './han.ts'
+import type { Entry } from './model.ts'
 import { flat, hasKanji, japanese, latinKey, qualifiers, titleKey } from './text.ts'
 import { node, Union } from './union.ts'
 
@@ -160,9 +162,17 @@ interface Pending {
   known: boolean
   drawn: boolean
   plain: boolean
+  copyrights: Drawn[]
 }
 
-function attachCharacters(union: Union, staged: Staged[], titles: ReadonlyMap<string, ReadonlySet<string>>): number {
+const DANBOORU = 'danbooru:'
+
+function attachCharacters(
+  union: Union,
+  staged: Staged[],
+  titles: ReadonlyMap<string, ReadonlySet<string>>,
+  copyrights: Copyrights,
+): number {
   const workOf = (ref: string) => {
     const key = node('work', ref)
     return union.has(key) && union.anchored(key) ? union.find(key) : undefined
@@ -242,17 +252,28 @@ function attachCharacters(union: Union, staged: Staged[], titles: ReadonlyMap<st
     return dominance && lead >= DOMINANT && lead >= DOMINANT * (ranks.get(second ?? '') ?? 0) ? first : undefined
   }
   const pending = new Map<string, Pending>()
+  const held = new Map<string, Drawn[]>()
+  const hold = (at: string, drawn: readonly Drawn[]) => held.set(at, [...(held.get(at) ?? []), ...drawn])
+  const drawnBy = (entry: Entry) =>
+    [entry.id, ...(entry.refs ?? [])].flatMap((ref) => {
+      const drawn = ref.startsWith(DANBOORU) ? copyrights.characters.get(ref.slice(DANBOORU.length)) : undefined
+      return drawn ? [drawn] : []
+    })
   for (const s of staged) {
     const { entry } = s
     if (s.source === BANGUMI || entry.kind !== 'character' || entry.attach) continue
     const root = union.find(node('character', entry.id))
-    if (union.anchored(root)) continue
+    if (union.anchored(root)) {
+      if (s.source === 'danbooru') hold(root, drawnBy(entry))
+      continue
+    }
     const found = pending.get(root) ?? {
       keys: new Map<string, number>(),
       scope: new Set<string>(),
       known: false,
       drawn: false,
       plain: false,
+      copyrights: [],
     }
     pending.set(root, found)
     const widen = (work: string) => {
@@ -265,6 +286,7 @@ function attachCharacters(union: Union, staged: Staged[], titles: ReadonlyMap<st
     }
     if (s.source === 'danbooru') {
       found.drawn = true
+      found.copyrights.push(...drawnBy(entry))
       found.plain ||= qualifiers(entry.id.slice('danbooru:'.length).replace(/_/g, ' ')).quals.length === 0
       for (const tag of [entry.id, ...(entry.refs ?? [])]) {
         if (!tag.startsWith('danbooru:')) continue
@@ -282,7 +304,10 @@ function attachCharacters(union: Union, staged: Staged[], titles: ReadonlyMap<st
     }
   }
   let attached = 0
-  for (const [root, { keys, scope, known, drawn, plain }] of [...pending].sort(byKey)) {
+  let separate = 0
+  const postsOf = (found: Pending) => Math.max(0, ...found.copyrights.map((drawn) => drawn.posts))
+  const inOrder = [...pending].sort((a, b) => postsOf(b[1]) - postsOf(a[1]) || byKey(a, b))
+  for (const [root, { keys, scope, known, drawn, plain, copyrights: mine }] of inOrder) {
     if (scope.size === 0 && known && !drawn) continue
     const levels = new Map<number, { targets: Set<string>; unclear: boolean }>()
     for (const [key, level] of keys) {
@@ -300,12 +325,21 @@ function attachCharacters(union: Union, staged: Staged[], titles: ReadonlyMap<st
     const targets = [...(top?.[1].targets ?? [])]
     const one = targets.length === 1 || together(targets.map((at) => appears.get(at) ?? new Set<string>()))
     const [target] = ranked(targets)
-    if (one && target !== undefined && union.union(target, root)) attached++
+    if (!one || target === undefined) continue
+    if (mine.some((a) => (held.get(target) ?? []).some((b) => apart(a, b)))) {
+      separate++
+      continue
+    }
+    if (union.union(target, root)) {
+      attached++
+      hold(target, mine)
+    }
   }
+  console.log(`build: kept ${separate} tags off a character whose other tags are drawn in other works`)
   return attached
 }
 
-export function link(staged: Staged[], hide = false): Union {
+export function link(staged: Staged[], hide = false, copyrights: Copyrights = NO_COPYRIGHTS): Union {
   const spine = new Set<string>()
   for (const s of staged) {
     if (s.source === BANGUMI && !s.entry.attach && s.entry.kind) spine.add(node(s.entry.kind, s.entry.id))
@@ -326,7 +360,7 @@ export function link(staged: Staged[], hide = false): Union {
   console.log(`build: refused ${union.refused} id links that would join two Bangumi entries`)
   const works = attachWorks(union, staged)
   console.log(`build: attached ${works} works by a Japanese title only one Bangumi work of that medium and year has`)
-  const characters = attachCharacters(union, staged, workTitles(union, staged))
+  const characters = attachCharacters(union, staged, workTitles(union, staged), copyrights)
   console.log(`build: attached ${characters} characters by a name only one Bangumi character in reach has`)
   return union
 }

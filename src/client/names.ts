@@ -26,6 +26,7 @@ export interface Found {
   works: string[]
   refs: string[]
   home: string | null
+  copyrights: string[]
   origin: string[]
   year: number | null
   medium: string | null
@@ -136,6 +137,7 @@ function card(rows: EntityRow[], score: number, adult: boolean, match: Match | n
   const works = head.kind === 'character' ? [...new Set(rows.flatMap((row) => row.works.map(([, id]) => id)))] : []
   const refs = [...new Set(rows.flatMap((row) => row.refs))].sort()
   const home = rows.findLast((row) => row.home !== null)?.home ?? null
+  const copyrights = [...new Set(rows.flatMap((row) => row.copyrights))]
   const origin = [...new Set(rows.flatMap((row) => row.origin))]
   return {
     id: head.id,
@@ -146,6 +148,7 @@ function card(rows: EntityRow[], score: number, adult: boolean, match: Match | n
     works,
     refs,
     home,
+    copyrights,
     origin,
     year: rows.find((row) => row.year !== null)?.year ?? null,
     medium: rows.find((row) => row.medium !== null)?.medium ?? null,

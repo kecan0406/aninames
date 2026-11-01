@@ -223,6 +223,7 @@ export interface EntityRow {
   origin: string[]
   year: number | null
   medium: string | null
+  copyrights: string[]
 }
 
 const isInt = (value: unknown): value is number => Number.isSafeInteger(value)
@@ -293,6 +294,7 @@ function entityRow(value: unknown): EntityRow | undefined {
     rawOrigin = [],
     year = null,
     medium = null,
+    rawCopyrights = [],
   ] = value
   if (!isCount(eid) || typeof id !== 'string') return undefined
   const kind: Kind | undefined = id.startsWith('w/') ? 'work' : id.startsWith('c/') ? 'character' : undefined
@@ -303,7 +305,8 @@ function entityRow(value: unknown): EntityRow | undefined {
   const reach = list(rawReach, eidOf)
   const refs = list(rawRefs, refOf)
   const origin = list(rawOrigin, countryOf)
-  if (!names || !danbooru || !works || !reach || !refs || !origin) return undefined
+  const copyrights = list(rawCopyrights, (tag) => (typeof tag === 'string' && tag !== '' ? tag : undefined))
+  if (!names || !danbooru || !works || !reach || !refs || !origin || !copyrights) return undefined
   if (home !== null && typeof home !== 'string') return undefined
   if ((year !== null && !isCount(year)) || (medium !== null && typeof medium !== 'string')) return undefined
   return {
@@ -323,6 +326,7 @@ function entityRow(value: unknown): EntityRow | undefined {
     origin,
     year,
     medium,
+    copyrights,
   }
 }
 
