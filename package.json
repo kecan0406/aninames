@@ -1,6 +1,6 @@
 {
   "name": "@kecan0406/aninames",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
   "description": "Multilingual alias index for anime titles and characters",
   "license": "MIT",

@@ -179,7 +179,10 @@ test('cast lists the characters at home in a tag by role before posts', async ()
     const unlicensed = { ...keys, tag: empty, home: home.packed(false), entity: entity.packed(true) }
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ aninames: FORMAT, built: '', layers: { unlicensed } }))
     const names = new Names(fileSource(dir))
-    expect((await names.cast('Starfall Harbor')).map((found) => found.id)).toEqual(['c/x:1', 'c/x:5'])
+    expect((await names.cast('Starfall Harbor')).map((found) => [found.id, found.role])).toEqual([
+      ['c/x:1', 'support'],
+      ['c/x:5', 'minor'],
+    ])
     expect((await names.cast('starfall_harbor', { limit: 1 })).map((found) => found.id)).toEqual(['c/x:1'])
     expect((await names.cast('tidepool_academy')).map((found) => [found.id, found.home])).toEqual([
       ['c/x:3', 'tidepool_academy'],

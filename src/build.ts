@@ -561,14 +561,24 @@ function homesOf(
     }
   }
   const learned = learnedOf(learning)
+  const collected = new Map<string, number>()
+  const heads = new Map<string, number>()
+  for (const [root, entity] of entities) {
+    if (entity.kind !== 'work') continue
+    const count = Math.max(0, ...entity.members.filter(own).map((m) => m.entry.rank ?? 0))
+    collected.set(root, count)
+    for (const tag of tagsUp(root).keys()) heads.set(tag, Math.max(heads.get(tag) ?? 0, count))
+  }
   const homes = new Map<string, Home>()
   for (const { id, quals, voted, choice, posts: count, roles } of chosen) {
     const named = quals.map((qual) => direct.get(qual)).find(Boolean)
     const taught = quals
       .map((qual) => learned.get(qual))
       .find((tag) => tag !== undefined && (voted.size === 0 || voted.has(tag)))
-    const tag = homeOf(choice, named, undefined, taught)
-    if (tag) homes.set(id, { tag, posts: count, tier: tierOf(roles, (work) => tagsUp(work).has(tag), true) })
+    const tag = homeOf(choice, named, taught)
+    if (!tag) continue
+    const size = (work: string) => (tagsUp(work).has(tag) ? (collected.get(work) ?? 0) : undefined)
+    homes.set(id, { tag, posts: count, tier: tierOf(roles, size, heads.get(tag) ?? 0) })
   }
   return homes
 }

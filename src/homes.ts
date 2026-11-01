@@ -6,6 +6,8 @@ const WEIGHTS = [3, 2, 1]
 
 const UNKNOWN = 2
 
+const HEAD = 3
+
 export interface Appearance {
   weight: number
   tags: ReadonlyMap<string, number>
@@ -59,18 +61,24 @@ export function chosenOf(
 export function homeOf(
   choice: Choice | undefined,
   named: string | undefined,
-  franchise: string | undefined,
   learned: string | undefined,
 ): string | undefined {
   if (choice?.most) return choice.tag
-  return named ?? choice?.tag ?? franchise ?? learned
+  return named ?? choice?.tag ?? learned
 }
 
-export function tierOf(roles: ReadonlyMap<string, number>, reaches: (work: string) => boolean, known: boolean): number {
-  let best = ROLES.length
-  for (const [work, role] of roles) if (role < best && reaches(work)) best = role
-  if (best < 2) return best
-  return known ? 2 : 3
+export function tierOf(
+  roles: ReadonlyMap<string, number>,
+  size: (work: string) => number | undefined,
+  head: number,
+): number {
+  let best = ROLES.length - 1
+  for (const [work, role] of roles) {
+    const count = size(work)
+    if (count === undefined) continue
+    best = Math.min(best, role === 0 && count * HEAD < head ? 1 : role)
+  }
+  return best
 }
 
 export function learnedOf(votes: ReadonlyMap<string, ReadonlyMap<string, number>>): Map<string, string> {

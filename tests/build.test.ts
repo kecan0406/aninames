@@ -30,17 +30,12 @@ test('a copyright tag takes the same-title works the evidence ties together: the
   expect(familyOf([], new Set())).toEqual([])
 })
 
-test('a character goes home by the tag most of its works reach, then by its qualifier, then by its works, its franchise or what characters sharing its qualifier chose', () => {
-  expect(homeOf({ tag: 'crossover_quest', most: true }, 'tidepool_academy', undefined, undefined)).toBe(
-    'crossover_quest',
-  )
-  expect(homeOf({ tag: 'crossover_quest', most: false }, 'tidepool_academy', undefined, undefined)).toBe(
-    'tidepool_academy',
-  )
-  expect(homeOf({ tag: 'crossover_quest', most: false }, undefined, 'academy_saga', undefined)).toBe('crossover_quest')
-  expect(homeOf(undefined, undefined, 'academy_saga', 'tidepool_academy')).toBe('academy_saga')
-  expect(homeOf(undefined, undefined, undefined, 'tidepool_academy')).toBe('tidepool_academy')
-  expect(homeOf(undefined, undefined, undefined, undefined)).toBeUndefined()
+test('a character goes home by the tag most of its works reach, then by its qualifier, then by its works or what characters sharing its qualifier chose', () => {
+  expect(homeOf({ tag: 'crossover_quest', most: true }, 'tidepool_academy', undefined)).toBe('crossover_quest')
+  expect(homeOf({ tag: 'crossover_quest', most: false }, 'tidepool_academy', undefined)).toBe('tidepool_academy')
+  expect(homeOf({ tag: 'crossover_quest', most: false }, undefined, 'academy_saga')).toBe('crossover_quest')
+  expect(homeOf(undefined, undefined, 'tidepool_academy')).toBe('tidepool_academy')
+  expect(homeOf(undefined, undefined, undefined)).toBeUndefined()
   const votes = new Map([
     [
       'tpa',
@@ -98,17 +93,21 @@ test("a character's works choose the most specific tag most of them reach and th
   expect(chosenOf([work(2)], all, posts)).toBeUndefined()
 })
 
-test("a character's place in its home's cast is its best role in a work of that home, then whether a catalog knows it", () => {
-  const home = new Set(['harbor_tv', 'harbor_film'])
-  const reaches = (work: string) => home.has(work)
+test("a character's place in its home's cast is its best role in a work of that home, a lead counting only in a work with a third of the home's most collected", () => {
+  const home = new Map([
+    ['harbor_tv', 30000],
+    ['harbor_film', 12000],
+    ['harbor_spinoff', 900],
+  ])
+  const size = (work: string) => home.get(work)
   expect(
     tierOf(
       new Map([
         ['harbor_tv', 1],
         ['harbor_film', 0],
       ]),
-      reaches,
-      true,
+      size,
+      30000,
     ),
   ).toBe(0)
   expect(
@@ -117,13 +116,22 @@ test("a character's place in its home's cast is its best role in a work of that 
         ['harbor_tv', 1],
         ['crossover_quest', 0],
       ]),
-      reaches,
-      true,
+      size,
+      30000,
     ),
   ).toBe(1)
-  expect(tierOf(new Map([['harbor_tv', 2]]), reaches, true)).toBe(2)
-  expect(tierOf(new Map(), reaches, true)).toBe(2)
-  expect(tierOf(new Map(), reaches, false)).toBe(3)
+  expect(
+    tierOf(
+      new Map([
+        ['harbor_tv', 2],
+        ['harbor_spinoff', 0],
+      ]),
+      size,
+      30000,
+    ),
+  ).toBe(1)
+  expect(tierOf(new Map([['harbor_tv', 2]]), size, 30000)).toBe(2)
+  expect(tierOf(new Map(), size, 30000)).toBe(2)
 })
 
 test('a character is adult only when every work it is in, in any layer, is adult', () => {

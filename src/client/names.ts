@@ -1,5 +1,5 @@
 import { gunzipSync } from 'node:zlib'
-import { type Kind, LAYERS, type Layer, type NameKind, SPINE } from '../model.ts'
+import { type Kind, LAYERS, type Layer, type NameKind, ROLES, type Role, SPINE } from '../model.ts'
 import { flat, qualifiers } from '../text.ts'
 import { type Rows, View } from './chunks.ts'
 import { type Match, matchOf, search } from './engine.ts'
@@ -32,6 +32,10 @@ export interface Found {
   score: number
   match: Match | null
   adult: boolean
+}
+
+export interface Member extends Found {
+  role: Role
 }
 
 export interface Trace {
@@ -205,21 +209,22 @@ export class Names {
     tag: string,
     options: { kind?: Kind; adult?: boolean; prefix?: boolean; signal?: AbortSignal } = {},
   ): Promise<Found[]> {
-    return this.#tagged('tag', tag, options)
+    return this.#tagged('tag', tag, options, (found) => found)
   }
 
   cast(
     tag: string,
     options: { adult?: boolean; prefix?: boolean; limit?: number; signal?: AbortSignal } = {},
-  ): Promise<Found[]> {
-    return this.#tagged('home', tag, options)
+  ): Promise<Member[]> {
+    return this.#tagged('home', tag, options, (found, tier) => ({ ...found, role: ROLES[tier] ?? 'minor' }))
   }
 
-  #tagged(
+  #tagged<T>(
     table: 'tag' | 'home',
     tag: string,
     options: { kind?: Kind; adult?: boolean; prefix?: boolean; limit?: number; signal?: AbortSignal },
-  ): Promise<Found[]> {
+    make: (found: Found, tier: number) => T,
+  ): Promise<T[]> {
     const { kind, adult = true, prefix = false, limit = Number.POSITIVE_INFINITY, signal } = options
     const key = flat(qualifiers(tag).base)
     return this.#run(signal, (view) => {
@@ -249,7 +254,7 @@ export class Names {
       view.labels = true
       const out = order.flatMap(([eid, hit]) => {
         const rows = view.entity(eid, hit.mask)
-        return rows.length > 0 ? [card(rows, 0, (hit.flags & ADULT) !== 0)] : []
+        return rows.length > 0 ? [make(card(rows, 0, (hit.flags & ADULT) !== 0), hit.tier)] : []
       })
       return view.wanted.size > 0 ? undefined : out
     })
