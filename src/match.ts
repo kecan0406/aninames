@@ -26,7 +26,17 @@ export function priorOf(medium: string | null, type: string | null, tagged: bool
   return (medium === 'anime' && type !== 'UNKNOWN' ? 6 : 0) + (type === 'TV' ? 2 : 0) + (tagged ? TAGGED : 0)
 }
 
-export const PRINTED: ReadonlySet<string> = new Set(['manga', 'novel'])
+const PRINTED: ReadonlySet<string> = new Set(['manga', 'novel'])
+
+const LOOSE: ReadonlySet<string> = new Set(['prefix', 'typing', 'initials prefix', 'substring', 'typo'])
+
+export function ownMatch(how: string | undefined): boolean {
+  return how !== undefined && !how.startsWith('family(') && !LOOSE.has(how)
+}
+
+export function liftsBelow(seed: string, medium: string | null | undefined, own: string | undefined): boolean {
+  return ownMatch(seed) && seed !== 'part' && !PRINTED.has(medium ?? '') && !ownMatch(own)
+}
 
 const BELOW = 0.01
 

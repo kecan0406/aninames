@@ -1,4 +1,4 @@
-import { belowSeed, PRINTED, swapLayout, TOP, typing } from '../match.ts'
+import { belowSeed, liftsBelow, swapLayout, TOP, typing } from '../match.ts'
 import type { Kind } from '../model.ts'
 import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from '../text.ts'
 import type { View } from './chunks.ts'
@@ -136,7 +136,7 @@ function family(view: View, hits: Map<number, Hit>, query: string): void {
   for (const seed of seeds) {
     const score = seed.score * 0.97
     const matched = flat(seed.matched)
-    const printed = view.entity(seed.eid, seed.mask).some((row) => PRINTED.has(row.medium ?? ''))
+    const medium = view.entity(seed.eid, seed.mask).find((row) => row.medium)?.medium
     for (const other of reach(view, seed).slice(0, FAMILY)) {
       const current = hits.get(other)
       if (current && current.score >= score) continue
@@ -154,7 +154,7 @@ function family(view: View, hits: Map<number, Hit>, query: string): void {
         extra: row.extra,
         adult: row.adult,
         mask: 0,
-        ...(printed ? {} : { seed: seed.eid }),
+        ...(liftsBelow(seed.how, medium, current?.how) ? { seed: seed.eid } : {}),
       })
     }
   }

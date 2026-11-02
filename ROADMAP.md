@@ -45,12 +45,12 @@ Popularity is Bangumi's alone since the spine, so namesakes reorder: `sakura` pu
 
 ## Guards
 
-### 7. A cast and home check in eval
+### 7. A probe floor in the audit
 
-`mise run eval` checks pairs that must be one character and reports, without counting them, which of ttheme's tags resolve (`tests/ttheme.tsv`, 139 of 139) and the homes of ttheme's commons (`tests/homes.tsv`, 140 right and none wrong). Left: count both now they hold, and a fixed set of works with their expected leads. `tests/probe.json` was redrawn for the Bangumi ids, so probe figures before 2026-11-01 are on another sample.
+`mise run eval` reports, without counting them, which of ttheme's tags resolve (`tests/ttheme.tsv`, 139 of 139) and the homes of ttheme's commons (`tests/homes.tsv`, 140 right and none wrong); `mise run audit` holds floors for both (95% of the tags, at most 5 wrong homes) and for the leads of 17 casts (`tests/leads.tsv`), so a release that loses them does not publish. Left: a probe floor there too, since a ranking change only shows in `mise run probe`. `tests/probe.json` was redrawn for the Bangumi ids, so probe figures before 2026-11-01 are on another sample.
 
 - Effort: small.
 
 ## Order
 
-1 first, by the owner; then 7, which turns what the 2026-11-02 work reached into a gate.
+1 first, by the owner; the rest as a consumer needs them.

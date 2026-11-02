@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { belowSeed, PRINTED, priorOf, swapLayout, TOP, typing, weightOf } from './match.ts'
+import { belowSeed, liftsBelow, priorOf, swapLayout, TOP, typing, weightOf } from './match.ts'
 import { type Kind, LAYERS, type Layer, type NameKind, SPINE } from './model.ts'
 import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from './text.ts'
 
@@ -335,7 +335,7 @@ export class Index {
     const seeds = [...hits.values()].filter((hit) => hit.kind === 'work' && hit.score >= 50)
     for (const seed of seeds) {
       const score = seed.score * 0.97
-      const printed = PRINTED.has(this.medium(seed.id) ?? '')
+      const medium = this.medium(seed.id)
       for (const other of this.reach(seed.id)) {
         const current = hits.get(other)
         if (current && current.score >= score) continue
@@ -346,7 +346,7 @@ export class Index {
           score,
           matched: seed.matched,
           how: `family(${seed.how})`,
-          ...(printed ? {} : { seed: seed.id }),
+          ...(liftsBelow(seed.how, medium, current?.how) ? { seed: seed.id } : {}),
         })
       }
     }
