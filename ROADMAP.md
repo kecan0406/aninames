@@ -14,7 +14,8 @@ What to improve next, each with what was seen or measured when it came up (2026-
 
 Danbooru has refused scripted requests (Cloudflare 403) since 2026-10-30, so builds stage the 10-03 raw data and read the post counts in `data/copyrights.json.gz`, counted once from a public copy. Since the spine it only supplies tags, aliases and post counts, never entities, so a frozen Danbooru no longer changes what the index holds; tags created since then are missing, and 2,339 tags with 50+ posts that no Bangumi character took on 2026-11-01 have no counts, and `tagged` and `cast` order by older post counts.
 
-- Options: an API key (an account owner's), Danbooru's BigQuery export (tags, aliases, implications), or running `scripts/copyrights.py` against a newer copy.
+- The public copy `scripts/copyrights.py` reads was last modified 2026-08-09 (checked 2026-11-02), older than the 10-03 tags, so running it again gains nothing until a newer copy appears.
+- Options: an API key (an account owner's), or Danbooru's BigQuery export (tags, aliases, implications).
 - Effort: medium.
 
 ## What a consumer shows
@@ -33,7 +34,7 @@ A tag with no qualifier still takes a one-word namesake anywhere in Bangumi when
 
 ### 5. Tags that join two people
 
-`son_gohan` and `grandpa_gohan` both attach to Bangumi's one 孫悟飯: the second tag's Japanese name is 孫悟飯 with a qualifier, and no count sets them apart since both are `dragon_ball`. Wikidata's two items join the same way, so `Grandpa Gohan` can read as a name of the wrong person. Two items of one source on one Bangumi entry are a signal nothing uses yet.
+`son_gohan` and `grandpa_gohan` both attach to Bangumi's one 孫悟飯: the second tag's Japanese name is 孫悟飯 with a qualifier, and no count sets them apart since both are `dragon_ball`. Wikidata's two items join the same way, so `Grandpa Gohan` can read as a name of the wrong person. Two items of one source on one Bangumi entry are a signal nothing uses yet: 51 characters and 461 works have two or more Wikidata items (2026-11-02), some rightly (All Might and Toshinori Yagi), some not (八神コウ with Aoba Suzukaze, 中須かすみ with Toshiaki Kasuga).
 
 - Effort: small to medium.
 
