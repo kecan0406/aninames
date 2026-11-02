@@ -64,7 +64,7 @@ export function closestWork(drawn: Drawn, sizes: ReadonlyMap<string, number>): s
 }
 
 export function ownersOf(drawn: Drawn, home?: string): string[] {
-  return drawn.works.flatMap(([tag, count]) => (tag !== home && count >= OWNED * drawn.posts ? [tag] : []))
+  return drawn.works.flatMap(([tag, count]) => (tag !== home && surely(count, drawn.posts, OWNED) ? [tag] : []))
 }
 
 export function apart(a: Drawn, b: Drawn): boolean {

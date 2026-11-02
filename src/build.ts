@@ -263,7 +263,7 @@ interface Home {
   tag: string
   posts: number | null
   tier: number
-  also: string[]
+  also: { tag: string; tier: number }[]
 }
 
 const TAG = 'danbooru:'
@@ -446,9 +446,10 @@ function homesOf(
     const closest = drawn && closestWork(drawn, copyrights.sizes)
     const tag = closest ?? homeOf(choice, named, taught)
     if (!tag) continue
-    const size = (work: string) => (tagsUp(work).has(tag) ? (collected.get(work) ?? 0) : undefined)
-    const also = drawn ? ownersOf(drawn, tag) : []
-    homes.set(id, { tag, posts: count, tier: tierOf(roles, size, heads.get(tag) ?? 0), also })
+    const tierIn = (at: string) =>
+      tierOf(roles, (work) => (tagsUp(work).has(at) ? (collected.get(work) ?? 0) : undefined), heads.get(at) ?? 0)
+    const also = (drawn ? ownersOf(drawn, tag) : []).map((at) => ({ tag: at, tier: tierIn(at) }))
+    homes.set(id, { tag, posts: count, tier: tierIn(tag), also })
   }
   return homes
 }
@@ -513,23 +514,27 @@ function namesOf(entity: Entity, layer: Layer, titles: Map<string, Set<string>>)
 }
 
 const KIND_ORDER: Record<NameKind, number> = {
+  main: 0,
   official: 0,
-  main: 1,
-  synonym: 2,
-  short: 3,
-  reading: 4,
-  redirect: 5,
-  section: 6,
-  generated: 7,
+  synonym: 1,
+  short: 2,
+  reading: 3,
+  redirect: 4,
+  section: 5,
+  generated: 6,
 }
 
 const SOURCE_ORDER = ['wikidata', 'anidb', 'vndb', 'aod', 'bangumi', 'kowiki', 'anissia', 'danbooru']
+
+function spokenAs(text: string): string {
+  return CJK.test(text) ? flat(text) : latinKey(text)
+}
 
 function backersOf(entity: Entity): Map<string, number> {
   const sets = new Map<string, Set<string>>()
   for (const m of entity.members) {
     for (const name of m.entry.names) {
-      const key = flat(name.text)
+      const key = spokenAs(name.text)
       const set = sets.get(key) ?? new Set<string>()
       set.add(m.source)
       sets.set(key, set)
@@ -561,24 +566,35 @@ function titleWordsOf(entity: Entity): Set<string> {
   const words = new Set<string>()
   for (const m of entity.members) {
     if (!m.entry.id.startsWith(TAG)) continue
-    for (const qual of qualifiers(m.entry.id.slice(TAG.length)).quals) for (const word of wordsIn(qual)) words.add(word)
+    const { base, quals } = qualifiers(m.entry.id.slice(TAG.length))
+    const own = new Set(wordsIn(base))
+    for (const qual of quals) for (const word of wordsIn(qual)) if (!own.has(word)) words.add(word)
   }
   return words
+}
+
+function topTagOf(entity: Entity): string | undefined {
+  const tagged = entity.members.filter((m) => m.entry.id.startsWith(TAG))
+  const top = tagged.sort((a, b) => (b.entry.rank ?? 0) - (a.entry.rank ?? 0))[0]
+  return top && spokenAs(qualifiers(top.entry.id.slice(TAG.length).replace(/_/g, ' ')).base)
 }
 
 function bestOf(
   rows: Row[],
   backers: ReadonlyMap<string, number>,
   titled: ReadonlySet<string>,
+  top: string | undefined,
 ): Map<string, { row: Row; key: number[] }> {
   const out = new Map<string, { row: Row; key: number[] }>()
   rows.forEach((row, at) => {
     if (!row.lang || row.qual !== null || row.variant || !written(row.lang, row.text)) return
     const source = SOURCE_ORDER.indexOf(row.source)
     const key = [
+      spokenAs(row.text) === top ? 0 : 1,
       KIND_ORDER[row.kind],
       Number(row.text.includes('(') || wordsIn(row.text).some((word) => titled.has(word))),
-      -(backers.get(flat(row.text)) ?? 1),
+      -(backers.get(spokenAs(row.text)) ?? 1),
+      row.kind === 'official' ? 0 : 1,
       source < 0 ? SOURCE_ORDER.length : source,
       at,
     ]
@@ -591,11 +607,12 @@ function bestOf(
 function preferencesOf(entity: Entity, layer: Layer, rows: Row[], titles: Map<string, Set<string>>): Map<Row, number> {
   const backers = backersOf(entity)
   const titled = entity.kind === 'character' ? titleWordsOf(entity) : new Set<string>()
+  const top = entity.kind === 'character' ? topTagOf(entity) : undefined
   const others = [...new Set(entity.members.map((m) => m.layer))]
     .filter((other) => other !== layer)
-    .map((other) => bestOf(namesOf(entity, other, titles), backers, titled))
+    .map((other) => bestOf(namesOf(entity, other, titles), backers, titled, top))
   const out = new Map<Row, number>()
-  for (const [lang, { row, key }] of bestOf(rows, backers, titled)) {
+  for (const [lang, { row, key }] of bestOf(rows, backers, titled, top)) {
     out.set(row, others.filter((other) => ahead(other.get(lang)?.key ?? [Infinity], key)).length)
   }
   return out
@@ -624,7 +641,9 @@ function schema(db: Database): void {
   db.run(
     'CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT NOT NULL, medium TEXT, type TEXT, year INTEGER, origin TEXT)',
   )
-  db.run('CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL, rank REAL, tier INTEGER NOT NULL)')
+  db.run(
+    'CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL, rank REAL, tier INTEGER NOT NULL, own INTEGER NOT NULL)',
+  )
   db.run(
     'CREATE TABLE names (rowid INTEGER PRIMARY KEY, entity TEXT NOT NULL, ekind TEXT NOT NULL, text TEXT NOT NULL, lang TEXT, kind TEXT NOT NULL, source TEXT NOT NULL, flat TEXT NOT NULL, latin TEXT NOT NULL, qual TEXT, variant INTEGER NOT NULL, support INTEGER NOT NULL, pref INTEGER)',
   )
@@ -636,7 +655,7 @@ function schema(db: Database): void {
   db.run('CREATE TABLE ranks (entity TEXT PRIMARY KEY, rank REAL NOT NULL)')
   db.run('CREATE TABLE adults (entity TEXT PRIMARY KEY)')
   db.run('CREATE TABLE homes (entity TEXT PRIMARY KEY, tag TEXT NOT NULL, posts INTEGER, tier INTEGER NOT NULL)')
-  db.run('CREATE TABLE copyrights (entity TEXT NOT NULL, tag TEXT NOT NULL)')
+  db.run('CREATE TABLE copyrights (entity TEXT NOT NULL, tag TEXT NOT NULL, tier INTEGER NOT NULL)')
 }
 
 function indexes(db: Database): void {
@@ -661,6 +680,10 @@ function licenses(sources: Source[]): Record<Layer, string[]> {
   for (const source of sources) out[source.layer].push(`${source.name}: ${source.license}`)
   return out
 }
+
+const ownTitles = (m: Staged) => m.entry.names.map((name) => flat(name.text))
+
+const tagTitle = (ref: string) => flat(qualifiers(ref.slice(TAG.length).replace(/_/g, ' ')).base)
 
 export function adultCharactersOf(
   entities: Iterable<{ id: string; kind: Kind; members: readonly { entry: Entry }[] }>,
@@ -717,7 +740,7 @@ export async function build(): Promise<void> {
     const insertEntity = db.prepare(
       'INSERT INTO entities (id, kind, medium, type, year, origin) VALUES (?, ?, ?, ?, ?, ?)',
     )
-    const insertRef = db.prepare('INSERT INTO refs (entity, ref, rank, tier) VALUES (?, ?, ?, ?)')
+    const insertRef = db.prepare('INSERT INTO refs (entity, ref, rank, tier, own) VALUES (?, ?, ?, ?, ?)')
     const insertName = db.prepare(
       'INSERT INTO names (entity, ekind, text, lang, kind, source, flat, latin, qual, variant, support, pref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid',
     )
@@ -729,7 +752,7 @@ export async function build(): Promise<void> {
     const insertRank = db.prepare('INSERT INTO ranks (entity, rank) VALUES (?, ?)')
     const insertAdult = db.prepare('INSERT INTO adults (entity) VALUES (?)')
     const insertHome = db.prepare('INSERT INTO homes (entity, tag, posts, tier) VALUES (?, ?, ?, ?)')
-    const insertCopyright = db.prepare('INSERT INTO copyrights (entity, tag) VALUES (?, ?)')
+    const insertCopyright = db.prepare('INSERT INTO copyrights (entity, tag, tier) VALUES (?, ?, ?)')
     let nameCount = 0
     db.transaction(() => {
       for (const [root, entity] of entities) {
@@ -769,7 +792,11 @@ export async function build(): Promise<void> {
             if (id && id !== entity.id) related.add(id)
           }
         }
-        for (const [ref, rank] of refs) insertRef.run(entity.id, ref, rank, heads.has(ref) ? 0 : 1)
+        const titled = entity.kind === 'work' ? new Set(entity.members.filter(own).flatMap(ownTitles)) : undefined
+        for (const [ref, rank] of refs) {
+          const named = !titled || !ref.startsWith(TAG) || titled.has(tagTitle(ref))
+          insertRef.run(entity.id, ref, rank, heads.has(ref) ? 0 : 1, named ? 1 : 0)
+        }
         if (best > 0) insertRank.run(entity.id, best)
         for (const work of works) insertWork.run(entity.id, work)
         const flagged =
@@ -808,7 +835,7 @@ export async function build(): Promise<void> {
       if (layer === SPINE) {
         for (const [id, home] of homes) {
           insertHome.run(id, home.tag, home.posts, home.tier)
-          for (const tag of home.also) insertCopyright.run(id, tag)
+          for (const { tag, tier } of home.also) insertCopyright.run(id, tag, tier)
         }
       }
       const meta = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)')

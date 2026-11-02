@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { priorOf, swapLayout, TOP, typing, weightOf } from './match.ts'
+import { belowSeed, PRINTED, priorOf, swapLayout, TOP, typing, weightOf } from './match.ts'
 import { type Kind, LAYERS, type Layer, type NameKind, SPINE } from './model.ts'
 import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from './text.ts'
 
@@ -12,6 +12,7 @@ export interface Hit {
   matched: string
   how: string
   adult?: boolean
+  seed?: string
 }
 
 export interface Card {
@@ -334,11 +335,19 @@ export class Index {
     const seeds = [...hits.values()].filter((hit) => hit.kind === 'work' && hit.score >= 50)
     for (const seed of seeds) {
       const score = seed.score * 0.97
+      const printed = PRINTED.has(this.medium(seed.id) ?? '')
       for (const other of this.reach(seed.id)) {
         const current = hits.get(other)
         if (current && current.score >= score) continue
         if (!this.names(other, wanted) && !this.names(other, flat(seed.matched))) continue
-        hits.set(other, { id: other, kind: 'work', score, matched: seed.matched, how: `family(${seed.how})` })
+        hits.set(other, {
+          id: other,
+          kind: 'work',
+          score,
+          matched: seed.matched,
+          how: `family(${seed.how})`,
+          ...(printed ? {} : { seed: seed.id }),
+        })
       }
     }
   }
@@ -450,19 +459,21 @@ export class Index {
       .filter((hit) => options.adult !== false || !this.adult(hit.id))
       .slice(0, 60)
     const weight = /\s/.test(query.trim()) ? 15 : 25
-    return first
-      .map((hit) => {
-        const base = hits.get(hit.id)?.score ?? 0
-        return {
-          ...hit,
-          score:
-            base +
-            weight * this.standing(hit) +
-            this.prior(hit) +
-            (hit.kind === 'character' ? this.corroboration(hit.id) : 0),
-          adult: this.adult(hit.id),
-        }
-      })
+    const scored = first.map((hit) => {
+      const base = hits.get(hit.id)?.score ?? 0
+      return {
+        ...hit,
+        score:
+          base +
+          weight * this.standing(hit) +
+          this.prior(hit) +
+          (hit.kind === 'character' ? this.corroboration(hit.id) : 0),
+        adult: this.adult(hit.id),
+      }
+    })
+    const finals = new Map(scored.map((hit) => [hit.id, hit.score]))
+    return scored
+      .map((hit) => ({ ...hit, score: belowSeed(hit.score, hit.seed ? finals.get(hit.seed) : undefined) }))
       .sort((a, b) => b.score - a.score)
       .slice(0, options.limit ?? 10)
   }

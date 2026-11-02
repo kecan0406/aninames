@@ -285,7 +285,7 @@ const TAG_SQL: Record<'tag' | 'home', string> = {
   tag: `SELECT entity, substr(ref, 10) AS tag, max(rank) AS posts, min(tier) AS tier FROM refs
 WHERE ref GLOB 'danbooru:*' GROUP BY entity, ref`,
   home: `SELECT entity, tag, posts, tier FROM homes UNION ALL
-SELECT c.entity, c.tag, h.posts, h.tier AS tier FROM copyrights c JOIN homes h ON h.entity = c.entity`,
+SELECT c.entity, c.tag, h.posts, c.tier FROM copyrights c JOIN homes h ON h.entity = c.entity`,
 }
 
 function tagTable(db: Database, layer: Layer, table: 'tag' | 'home', context: Context): Writer {
@@ -329,8 +329,9 @@ const ENTITY_SQL = `WITH ids(id) AS (${IDS})
 SELECT ids.id AS id,
   (SELECT json_group_array(json_array(text, lang, kind, source, qual, pref)) FROM
     (SELECT text, lang, kind, source, qual, pref FROM names WHERE entity = ids.id ORDER BY rowid)) AS names,
-  (SELECT json_group_array(json_array(substr(ref, 10), rank)) FROM
-    (SELECT ref, rank FROM refs WHERE entity = ids.id AND ref GLOB 'danbooru:*' ORDER BY rank IS NULL, rank DESC, rowid)) AS tags,
+  (SELECT json_group_array(json_array(substr(ref, 10), CASE WHEN own = 1 THEN rank END)) FROM
+    (SELECT ref, rank, own FROM refs WHERE entity = ids.id AND ref GLOB 'danbooru:*'
+      ORDER BY own DESC, rank IS NULL, rank DESC, rowid)) AS tags,
   (SELECT json_group_array(work) FROM
     (SELECT work FROM works WHERE character = ids.id GROUP BY work ORDER BY min(rowid))) AS works,
   (SELECT json_group_array(ref) FROM

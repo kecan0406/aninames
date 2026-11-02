@@ -1,4 +1,4 @@
-import { swapLayout, TOP, typing } from '../match.ts'
+import { belowSeed, PRINTED, swapLayout, TOP, typing } from '../match.ts'
 import type { Kind } from '../model.ts'
 import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from '../text.ts'
 import type { View } from './chunks.ts'
@@ -25,6 +25,7 @@ export interface Hit {
   extra: number
   adult: boolean
   mask: number
+  seed?: number
 }
 
 const SEEDS = 8
@@ -135,6 +136,7 @@ function family(view: View, hits: Map<number, Hit>, query: string): void {
   for (const seed of seeds) {
     const score = seed.score * 0.97
     const matched = flat(seed.matched)
+    const printed = view.entity(seed.eid, seed.mask).some((row) => PRINTED.has(row.medium ?? ''))
     for (const other of reach(view, seed).slice(0, FAMILY)) {
       const current = hits.get(other)
       if (current && current.score >= score) continue
@@ -152,6 +154,7 @@ function family(view: View, hits: Map<number, Hit>, query: string): void {
         extra: row.extra,
         adult: row.adult,
         mask: 0,
+        ...(printed ? {} : { seed: seed.eid }),
       })
     }
   }
@@ -250,8 +253,13 @@ export function search(view: View, query: string, options: Options = {}): Hit[] 
     .filter((hit) => options.adult !== false || !hit.adult)
     .slice(0, 60)
   const weight = /\s/.test(query.trim()) ? 15 : 25
-  return first
-    .map((hit) => ({ ...hit, score: (hits.get(hit.eid)?.score ?? 0) + (weight * hit.standing) / 1000 + hit.extra }))
+  const scored = first.map((hit) => ({
+    ...hit,
+    score: (hits.get(hit.eid)?.score ?? 0) + (weight * hit.standing) / 1000 + hit.extra,
+  }))
+  const finals = new Map(scored.map((hit) => [hit.eid, hit.score]))
+  return scored
+    .map((hit) => ({ ...hit, score: belowSeed(hit.score, hit.seed === undefined ? undefined : finals.get(hit.seed)) }))
     .sort((a, b) => b.score - a.score)
     .slice(0, options.limit ?? 10)
 }
