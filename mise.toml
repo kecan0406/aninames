@@ -25,7 +25,7 @@ description = "cut the built layers' search keys into the static site in dist/si
 run = "bun src/cli.ts chunk"
 
 [tasks.audit]
-description = "check the built files before they are published: mise run audit [previous stats.json] [published client dir]"
+description = "check the built files before they are published: mise run audit [previous stats.json] [published client dir…]"
 run = "bun src/cli.ts audit"
 
 [tasks.compare]

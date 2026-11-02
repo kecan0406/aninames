@@ -193,12 +193,13 @@ test('cast lists the characters at home in a tag by role before posts', async ()
   }
 })
 
-test('a lifted work stays below a seed that is not a book, and an anime passes its manga', async () => {
+test('a lifted work stays below a seed that is not a book, even a tied one, and an anime passes its manga', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
   try {
     const here = present('unlicensed')
     const flat = new Writer(join(dir, 'unlicensed', 'flat'), 4096)
     flat.add(['starfall', 0, 1000, here, 500, 500, 0], 'starfall')
+    flat.add(['starfall', 4, 1000, here, 500, 500, 0], 'starfall')
     flat.add(['tidepool', 2, 1000, here, 500, 500, 0], 'tidepool')
     flat.flush()
     const entity = new Writer(join(dir, 'unlicensed', 'entity'), 4096)
@@ -220,10 +221,11 @@ test('a lifted work stays below a seed that is not a book, and an anime passes i
       medium,
     ]
     for (const row of [
-      work(0, 'Starfall', [1], 500, 0, 'game'),
-      work(1, 'Starfall Trailer', [0], 900, 8, 'anime'),
+      work(0, 'Starfall', [1], 500, 0, 'manga'),
+      work(1, 'Starfall Trailer', [0, 4], 900, 8, 'anime'),
       work(2, 'Tidepool', [3], 500, 0, 'manga'),
       work(3, 'Tidepool Anime', [2], 900, 8, 'anime'),
+      work(4, 'Starfall', [1], 500, 0, 'game'),
     ])
       entity.add(row, row[1] as string, row[0] as number)
     entity.flush()
@@ -232,7 +234,11 @@ test('a lifted work stays below a seed that is not a book, and an anime passes i
     const layers = { unlicensed: { ...keys, flat: flat.packed(false), entity: entity.packed(true) } }
     writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ aninames: FORMAT, built: '', layers }))
     const names = new Names(fileSource(dir))
-    expect((await names.search('starfall', { kind: 'work' })).map((found) => found.id)).toEqual(['w/x:0', 'w/x:1'])
+    expect((await names.search('starfall', { kind: 'work' })).map((found) => found.id)).toEqual([
+      'w/x:0',
+      'w/x:4',
+      'w/x:1',
+    ])
     expect((await names.search('tidepool', { kind: 'work' })).map((found) => found.id)).toEqual(['w/x:3', 'w/x:2'])
   } finally {
     rmSync(dir, { recursive: true, force: true })

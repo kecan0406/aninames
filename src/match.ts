@@ -34,8 +34,12 @@ export function ownMatch(how: string | undefined): boolean {
   return how !== undefined && !how.startsWith('family(') && !LOOSE.has(how)
 }
 
+export function isBook(medium: string | null | undefined): boolean {
+  return PRINTED.has(medium ?? '')
+}
+
 export function liftsBelow(seed: string, medium: string | null | undefined, own: string | undefined): boolean {
-  return ownMatch(seed) && seed !== 'part' && !PRINTED.has(medium ?? '') && !ownMatch(own)
+  return ownMatch(seed) && seed !== 'part' && !isBook(medium) && !ownMatch(own)
 }
 
 const BELOW = 0.01

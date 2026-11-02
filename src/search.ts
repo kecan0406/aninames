@@ -1,7 +1,8 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { belowSeed, liftsBelow, priorOf, swapLayout, TOP, typing, weightOf } from './match.ts'
+import { compare } from './client/order.ts'
+import { belowSeed, isBook, liftsBelow, priorOf, swapLayout, TOP, typing, weightOf } from './match.ts'
 import { type Kind, LAYERS, type Layer, type NameKind, SPINE } from './model.ts'
 import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from './text.ts'
 
@@ -332,7 +333,11 @@ export class Index {
 
   private family(hits: Map<string, Hit>, query: string): void {
     const wanted = flat(query)
-    const seeds = [...hits.values()].filter((hit) => hit.kind === 'work' && hit.score >= 50)
+    const seeds = [...hits.values()]
+      .filter((hit) => hit.kind === 'work' && hit.score >= 50)
+      .map((hit) => ({ hit, book: Number(isBook(this.medium(hit.id))) }))
+      .sort((a, b) => b.hit.score - a.hit.score || a.book - b.book || compare(a.hit.id, b.hit.id))
+      .map(({ hit }) => hit)
     for (const seed of seeds) {
       const score = seed.score * 0.97
       const medium = this.medium(seed.id)

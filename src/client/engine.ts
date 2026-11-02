@@ -1,4 +1,4 @@
-import { belowSeed, liftsBelow, swapLayout, TOP, typing } from '../match.ts'
+import { belowSeed, isBook, liftsBelow, swapLayout, TOP, typing } from '../match.ts'
 import type { Kind } from '../model.ts'
 import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from '../text.ts'
 import type { View } from './chunks.ts'
@@ -129,14 +129,18 @@ function named(rows: EntityRow[], text: string): boolean {
 
 function family(view: View, hits: Map<number, Hit>, query: string): void {
   const wanted = flat(query)
+  const mediumOf = (hit: Hit) => view.entity(hit.eid, hit.mask).find((row) => row.medium)?.medium
   const seeds = [...hits.values()]
     .filter((hit) => hit.kind === 'work' && hit.score >= 50)
     .sort((a, b) => b.score - a.score)
     .slice(0, SEEDS)
+    .map((hit) => ({ hit, book: Number(isBook(mediumOf(hit))) }))
+    .sort((a, b) => b.hit.score - a.hit.score || a.book - b.book || a.hit.eid - b.hit.eid)
+    .map(({ hit }) => hit)
   for (const seed of seeds) {
     const score = seed.score * 0.97
     const matched = flat(seed.matched)
-    const medium = view.entity(seed.eid, seed.mask).find((row) => row.medium)?.medium
+    const medium = mediumOf(seed)
     for (const other of reach(view, seed).slice(0, FAMILY)) {
       const current = hits.get(other)
       if (current && current.score >= score) continue

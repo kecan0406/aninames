@@ -302,10 +302,16 @@ function tagTable(db: Database, layer: Layer, table: 'tag' | 'home', context: Co
     }
   }
   rows.sort((a, b) => compare(a[0], b[0]) || a[1] - b[1] || b[2] - a[2])
+  const least = new Map<string, number>()
+  for (const [key, at, , , tier] of rows) {
+    const id = `${key}\u0000${at}`
+    if (tier !== undefined) least.set(id, Math.min(tier, least.get(id) ?? tier))
+  }
   let last: [string, number] | undefined
-  for (const [key, at, posts, character, tier] of rows) {
+  for (const [key, at, posts, character] of rows) {
     if (last && last[0] === key && last[1] === at) continue
     last = [key, at]
+    const tier = least.get(`${key}\u0000${at}`)
     const flags = (character ? CHARACTER : 0) | (score.adult[at] ? ADULT : 0) | (masks[at] ?? 0)
     writer.add(
       [

@@ -273,9 +273,20 @@ function attachCharacters(union: Union, staged: Staged[], graph: WorkGraph, copy
       const drawn = ref.startsWith(DANBOORU) ? copyrights.characters.get(ref.slice(DANBOORU.length)) : undefined
       return drawn ? [drawn] : []
     })
+  const keysOfEntry = (entry: Entry) =>
+    entry.names.flatMap((name) => {
+      if (name.kind === 'reading' || name.kind === 'short' || name.lang?.startsWith('zh')) return []
+      const key = characterKey(name.text)
+      return key ? [{ ...key, main: name.kind === 'main' }] : []
+    })
+  const tagKeys = new Map<string, Set<string>>()
   for (const s of staged) {
     const { entry } = s
     if (s.source === BANGUMI || entry.kind !== 'character' || entry.attach) continue
+    if (s.source === 'danbooru') {
+      const keys = new Set(keysOfEntry(entry).map(({ key }) => key))
+      for (const ref of [entry.id, ...(entry.refs ?? [])]) if (ref.startsWith(DANBOORU)) tagKeys.set(ref, keys)
+    }
     const root = union.find(node('character', entry.id))
     if (union.anchored(root)) {
       if (s.source === 'danbooru') hold(root, drawnBy(entry))
@@ -314,11 +325,9 @@ function attachCharacters(union: Union, staged: Staged[], graph: WorkGraph, copy
         }
       }
     }
-    for (const name of entry.names) {
-      if (name.kind === 'reading' || name.kind === 'short' || name.lang?.startsWith('zh')) continue
-      const key = characterKey(name.text)
-      if (key && key.level > (found.keys.get(key.key) ?? -1)) found.keys.set(key.key, key.level)
-      if (key && s.source === 'danbooru' && name.kind === 'main') found.named.add(key.key)
+    for (const { key, level, main } of keysOfEntry(entry)) {
+      if (level > (found.keys.get(key) ?? -1)) found.keys.set(key, level)
+      if (s.source === 'danbooru' && main) found.named.add(key)
     }
   }
   let attached = 0
@@ -338,9 +347,7 @@ function attachCharacters(union: Union, staged: Staged[], graph: WorkGraph, copy
   ): string | null | undefined => {
     const levels = new Map<number, Map<string, string[]>>()
     for (const [key, level] of keys) {
-      const body = key.slice(key.indexOf('|') + 1)
-      if (level >= KIN_LEVEL && [...mains].some((main) => main !== key && main.includes(body) && !holders.has(main)))
-        continue
+      if (level >= KIN_LEVEL && [...mains].some((main) => nestedIn(main, key) && !holders.has(main))) continue
       const named = [...(holders.get(key) ?? [])].filter((at) => !scoped || [...appearing(at)].some(within))
       if (named.length === 0) continue
       const found = levels.get(level) ?? new Map<string, string[]>()
@@ -355,11 +362,7 @@ function attachCharacters(union: Union, staged: Staged[], graph: WorkGraph, copy
     const targets = [...top.keys()]
     if (targets.length > 1 && !together(targets.map(appearing))) return undefined
     const narrower = (key: string, at: string) =>
-      targets.some(
-        (other) =>
-          other !== at &&
-          top.get(other)?.some((long) => long !== key && long.includes(key.slice(key.indexOf('|') + 1))),
-      )
+      targets.some((other) => other !== at && top.get(other)?.some((long) => nestedIn(long, key)))
     return ranked(targets.filter((at) => top.get(at)?.some((key) => !narrower(key, at))))[0]
   }
   const place = (root: string, found: Pending, target: string | null | undefined) => {
@@ -400,15 +403,18 @@ function attachCharacters(union: Union, staged: Staged[], graph: WorkGraph, copy
       const parts = /^(.+?)((?:_\([^)]*\))+)$/.exec(tag)
       if (!parts) continue
       const quals = (parts[2] ?? '').match(/_\([^)]*\)/g) ?? []
-      const base = `${parts[1]}${quals.length >= 2 ? quals.slice(1).join('') : ''}`
-      const key = node('character', `${DANBOORU}${base}`)
-      if (!union.has(key) || !union.anchored(key)) continue
-      const drawn = copyrights.characters.get(base)
-      if (quals.length < 2 && !(drawn && majorsOf(drawn).some((at) => tags.includes(at)))) continue
-      const known = pending.get(key)?.keys
-      const keys = new Map([...found.keys].filter(([name]) => !known?.has(name)))
-      const own = keys.size > 0 ? pick({ ...found, keys }, true, inAny(tags.map(reachOf))) : null
-      return own === null ? union.find(key) : own
+      const bases = quals.length >= 2 ? [quals.slice(1).join(''), quals.at(-1) ?? ''] : ['']
+      for (const rest of new Set(bases)) {
+        const base = `${parts[1]}${rest}`
+        const key = node('character', `${DANBOORU}${base}`)
+        if (!union.has(key) || !union.anchored(key)) continue
+        const drawn = copyrights.characters.get(base)
+        if (quals.length < 2 && !(drawn && majorsOf(drawn).some((at) => tags.includes(at)))) continue
+        const known = tagKeys.get(`${DANBOORU}${base}`)
+        const keys = new Map([...found.keys].filter(([name]) => !known?.has(name)))
+        const own = keys.size > 0 ? pick({ ...found, keys }, true, inAny(tags.map(reachOf))) : null
+        return own === null ? union.find(key) : own
+      }
     }
     return null
   }
@@ -424,7 +430,9 @@ function attachCharacters(union: Union, staged: Staged[], graph: WorkGraph, copy
     if (target === null && found.scope.size > 0) target = pick(found, true, (work) => found.scope.has(work))
     if (target === null && tags.length > 0) target = pick(found, true, inAny(tags.map(reachOf)))
     if (target === null && found.scope.size === 0 && (!found.known || found.drawn)) {
-      target = pick(found, false, () => true)
+      const placed = !found.plain && tags.some((tag) => reachOf(tag).size > 0)
+      const keys = new Map([...found.keys].filter(([, level]) => !placed || level >= KIN_LEVEL))
+      target = pick({ ...found, keys }, false, () => true)
     }
     place(root, found, target)
   }
@@ -475,6 +483,16 @@ function attachCharacters(union: Union, staged: Staged[], graph: WorkGraph, copy
   headsOf(union, graph, learned, staged)
   console.log(`build: kept ${separate} tags off a character whose other tags are drawn in other works`)
   return attached
+}
+
+export function nestedIn(long: string, short: string): boolean {
+  if (long === short) return false
+  const [space = '', body = ''] = long.split('|')
+  const [other = '', part = ''] = short.split('|')
+  if (space !== other) return false
+  if (space !== 'latin') return body.includes(part)
+  const words = body.split(' ')
+  return part.split(' ').every((word) => words.includes(word))
 }
 
 function learnedReach(

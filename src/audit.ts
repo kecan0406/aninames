@@ -19,6 +19,8 @@ const LEAST_TAGS = 0.95
 
 const MOST_WRONG_HOMES = 5
 
+const LEAST_RIGHT_HOMES = 130
+
 const LEADS_READ = 60
 
 export type Stats = Record<string, number>
@@ -79,17 +81,21 @@ async function lostTags(dir: string): Promise<string[]> {
   const index = new Index(dir)
   const tags = await rows('ttheme.tsv')
   const lost = tags.filter(([tag]) => !index.resolve(`danbooru:${tag}`, 'character'))
-  const wrong = (await rows('homes.tsv')).filter(([tag, want]) => {
+  let right = 0
+  let wrong = 0
+  for (const [tag, want = ''] of await rows('homes.tsv')) {
     const id = index.resolve(`danbooru:${tag}`, 'character')
     const home = id && index.home(id)
-    return id && home && home !== want && !index.copyrights(id).includes(want as string)
-  })
+    if (id && (home === want || index.copyrights(id).includes(want))) right++
+    else if (home) wrong++
+  }
   index.close()
   return [
     ...(lost.length > tags.length * (1 - LEAST_TAGS)
       ? [`${lost.length} of ttheme's ${tags.length} tags attach nowhere`]
       : []),
-    ...(wrong.length > MOST_WRONG_HOMES ? [`${wrong.length} of ttheme's homes are wrong`] : []),
+    ...(wrong > MOST_WRONG_HOMES ? [`${wrong} of ttheme's homes are wrong`] : []),
+    ...(right < LEAST_RIGHT_HOMES ? [`only ${right} of ttheme's homes are right`] : []),
   ]
 }
 
@@ -152,7 +158,7 @@ export async function contract(names: Client): Promise<string[]> {
   return failed
 }
 
-export async function audit(dir: string, previous?: string, published?: string): Promise<number> {
+export async function audit(dir: string, previous?: string, published: readonly string[] = []): Promise<number> {
   const site = join(dir, 'site')
   const failed = brokenFiles(site)
   const stats = statsOf(dir)
@@ -163,13 +169,12 @@ export async function audit(dir: string, previous?: string, published?: string):
   const source: Source = fileSource(site)
   const names = new Names(source) as unknown as Client
   failed.push(...(await contract(names)).map((what) => `this client: ${what}`), ...(await lostLeads(names)))
-  if (published) {
-    const client = (await import(join(published, 'lib', 'client', 'index.js'))) as {
+  for (const client of published) {
+    const { Names: Published, fileSource: filesOf } = (await import(join(client, 'lib', 'client', 'index.js'))) as {
       Names: new (source: Source) => Client
       fileSource: (dir: string) => Source
     }
-    const reader = new client.Names(client.fileSource(site))
-    failed.push(...(await contract(reader)).map((what) => `the published client: ${what}`))
+    failed.push(...(await contract(new Published(filesOf(site)))).map((what) => `the client in ${client}: ${what}`))
   }
   writeFileSync(join(dir, 'release', 'stats.json'), `${JSON.stringify(stats, null, 1)}\n`)
   for (const what of failed) console.log(`::error::audit: ${what}`)

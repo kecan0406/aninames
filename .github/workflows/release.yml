@@ -51,11 +51,20 @@ jobs:
       - name: Audit before anything is published
         env:
           GH_TOKEN: ${{ github.token }}
+          CONSUMER_CLIENT: '0.5'
         run: |
           bun src/cli.ts eval
-          gh release download --pattern stats.json --dir .cache/previous || true
-          (cd .cache && npm pack @kecan0406/aninames --silent && mkdir -p client && tar -xzf kecan0406-aninames-*.tgz -C client)
-          bun src/cli.ts audit .cache/previous/stats.json "$PWD/.cache/client/package"
+          assets="$(gh release view --json assets --jq '.assets[].name')"
+          if grep -qx stats.json <<<"$assets"; then
+            gh release download --pattern stats.json --dir .cache/previous
+          fi
+          clients=()
+          for version in "$CONSUMER_CLIENT" latest; do
+            mkdir -p ".cache/client/$version"
+            (cd ".cache/client/$version" && npm pack "@kecan0406/aninames@$version" --silent && tar -xzf kecan0406-aninames-*.tgz)
+            clients+=("$PWD/.cache/client/$version/package")
+          done
+          bun src/cli.ts audit .cache/previous/stats.json "${clients[@]}"
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist/site

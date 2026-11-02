@@ -41,7 +41,7 @@ async function main(argv: string[]): Promise<void> {
       await chunk(DIST, Number(rest[0] ?? 32_768))
       return
     case 'audit': {
-      process.exitCode = (await audit(DIST, rest[0], rest[1])) > 0 ? 1 : 0
+      process.exitCode = (await audit(DIST, rest[0], rest.slice(1))) > 0 ? 1 : 0
       return
     }
     case 'compare': {

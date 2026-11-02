@@ -14,12 +14,23 @@ export class Missing extends Error {}
 const MOST_BYTES = 64 * 2 ** 20
 
 async function bodyOf(url: URL, response: Response): Promise<Uint8Array> {
-  if (Number(response.headers.get('content-length') ?? 0) > MOST_BYTES) {
-    await response.body?.cancel()
-    throw new Error(`aninames: ${url} is larger than ${MOST_BYTES} bytes`)
+  const parts: Uint8Array[] = []
+  let size = 0
+  const reader = response.body?.getReader()
+  for (let read = await reader?.read(); read && !read.done; read = await reader?.read()) {
+    size += read.value.byteLength
+    if (size > MOST_BYTES) {
+      await reader?.cancel()
+      throw new Error(`aninames: ${url} is larger than ${MOST_BYTES} bytes`)
+    }
+    parts.push(read.value)
   }
-  const bytes = new Uint8Array(await response.arrayBuffer())
-  if (bytes.byteLength > MOST_BYTES) throw new Error(`aninames: ${url} is larger than ${MOST_BYTES} bytes`)
+  const bytes = new Uint8Array(size)
+  let at = 0
+  for (const part of parts) {
+    bytes.set(part, at)
+    at += part.byteLength
+  }
   return bytes
 }
 

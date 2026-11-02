@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import type { Staged } from '../src/build.ts'
 import type { Entry } from '../src/model.ts'
-import { characterKey, link } from '../src/spine.ts'
+import { characterKey, link, nestedIn } from '../src/spine.ts'
 import { node } from '../src/union.ts'
 
 test('a name key ranks a full Japanese name over a long kana one, a two-word Latin one, a given name and one word', () => {
@@ -102,4 +102,11 @@ test('only Bangumi makes entities; others join one by an id, a title or a name n
   expect(anchor('character', 'danbooru:rem_(re:zero)')).toBe('character|bangumi:1')
   expect(anchor('character', 'danbooru:gotoh_hitori')).toBe('character|bangumi:3')
   expect(anchor('character', 'danbooru:rem_(cosplay)')).toBeUndefined()
+})
+
+test('a name nests in a longer one of its script, by its words in Latin', () => {
+  expect(nestedIn('ja|じゃんぬだるくおるた', 'ja|じゃんぬだるく')).toBe(true)
+  expect(nestedIn('latin|arc dark jeanne', 'latin|arc jeanne')).toBe(true)
+  expect(nestedIn('latin|arc jeanne', 'latin|arc jeanne')).toBe(false)
+  expect(nestedIn('ja|じゃんぬ', 'latin|jeanne')).toBe(false)
 })
