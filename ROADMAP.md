@@ -6,7 +6,7 @@ What to improve next, each with what was seen or measured when it came up (2026-
 
 ### 1. Register the npm trusted publisher
 
-`.github/workflows/publish.yml` publishes when `package.json`'s version is one npm does not have, with provenance and without a token. It fails with `ENEEDAUTH` until the package owner registers it on npmjs.com (owner `kecan0406`, repository `aninames`, workflow `publish.yml`), once; until then a version bump needs `npm publish` by hand behind two-factor.
+`.github/workflows/publish.yml` publishes when `package.json`'s version is one npm does not have, with provenance and without a token. It fails with `E404` on the PUT until the package owner registers it on npmjs.com (owner `kecan0406`, repository `aninames`, workflow `publish.yml`), once; until then a version bump needs `npm publish` by hand behind two-factor.
 
 - Effort: small, the owner's.
 
