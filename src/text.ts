@@ -308,13 +308,15 @@ export function latinKey(text: string): string {
   return tokens.sort().join(' ')
 }
 
-export function titleKey(text: string): string {
+export function titleWords(text: string): string[] {
   return foldLatin(text.normalize('NFKC'))
     .replace(/[_\-.,:;!?'"’・/]+/g, ' ')
     .split(/\s+/)
     .filter(Boolean)
-    .sort()
-    .join(' ')
+}
+
+export function titleKey(text: string): string {
+  return titleWords(text).sort().join(' ')
 }
 
 export function partKey(token: string): string {

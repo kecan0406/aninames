@@ -2,16 +2,26 @@ import { Database } from 'bun:sqlite'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type Copyrights, closestWork, type Drawn, drawnOf, ownersOf, readCopyrights } from './copyrights.ts'
-import { workNames as namesOfWorks, titleName, type WorkGraph } from './families.ts'
+import {
+  type FamilyKey,
+  familyKeysOf,
+  type KeyedWork,
+  workNames as namesOfWorks,
+  titleName,
+  type WorkGraph,
+} from './families.ts'
 import { alike, levelsOf, tiesOf, upward, wordsOf } from './graph.ts'
 import { type Appearance, type Choice, chosenOf, FLOOR, homeOf, learnedOf, tierOf, weightOf } from './homes.ts'
 import {
   type Entry,
+  type GameGenre,
+  type Genre,
   type Kind,
   LAYERS,
   type Layer,
   type Name,
   type NameKind,
+  type Nature,
   ROLES,
   type Source,
   SPINE,
@@ -84,6 +94,7 @@ interface Entity {
   kind: Kind
   layer: Layer
   members: Staged[]
+  nature?: Nature
 }
 
 function resolveEntities(
@@ -206,7 +217,7 @@ function attachEntries(
   let missed = 0
   for (const s of staged) {
     const { entry } = s
-    if (!entry.attach) continue
+    if (!entry.attach || entry.nature) continue
     if (entry.kind === 'character' && entry.link?.length) {
       const found = castOf(entry)
       if (found) {
@@ -227,7 +238,19 @@ function attachEntries(
       for (const root of works) entities.get(root)?.members.push(root === head ? s : tag)
       for (const root of reached) remember(spread, root, entry.id.slice(TAG.length))
       if (works.length > 0) attached++
-      else missed++
+      else {
+        missed++
+        const nature = graph.natures.get(entry.id)
+        if (nature !== 'term') {
+          entities.set(node('work', entry.id), {
+            id: `w/${entry.id}`,
+            kind: 'work',
+            layer: SPINE,
+            members: [s],
+            ...(nature ? { nature } : {}),
+          })
+        }
+      }
       continue
     }
     const kinds: Kind[] = entry.kind ? [entry.kind] : ['work', 'character']
@@ -267,6 +290,8 @@ interface Home {
 }
 
 const TAG = 'danbooru:'
+
+const TAGLESS = 'bangumi-'
 
 function tagsOf(root: string, entity: Entity, union: Union): Map<string, number | null> {
   const tags = new Map<string, number | null>()
@@ -627,6 +652,77 @@ function mediumOf(entity: Entity): Medium | null {
   return medium
 }
 
+export function genresFrom(said: readonly GameGenre[], listed: boolean): Genre[] {
+  return [
+    ...(said.includes('rhythm') ? (['rhythm'] as const) : []),
+    ...(listed && (said.includes('adventure') || said.length === 0) ? (['vn'] as const) : []),
+  ]
+}
+
+function genresOf(entity: Entity): Genre[] {
+  const spine = entity.members.find(own)?.entry
+  if (spine?.type !== 'GAME') return []
+  return genresFrom(
+    spine.genres ?? [],
+    entity.members.some((m) => mediaOf(m).includes('vn')),
+  )
+}
+
+function keyedWorks(union: Union, entities: ReadonlyMap<string, Entity>, graph: WorkGraph): Map<string, KeyedWork> {
+  const works = new Map<string, KeyedWork>()
+  for (const [root, entity] of entities) {
+    if (entity.kind !== 'work') continue
+    const titled = new Set(entity.members.filter(own).flatMap(ownTitles))
+    const named = (tag: string) => Number(titled.has(tagTitle(`${TAG}${tag}`)))
+    const [best] = [...tagsOf(root, entity, union)].sort(
+      ([a, x], [b, y]) => named(b) - named(a) || (y ?? -1) - (x ?? -1) || (a < b ? -1 : 1),
+    )
+    works.set(root, {
+      key: entity.id.slice('w/'.length).replace(':', '-'),
+      year: graph.years.get(root),
+      rank: entity.members.find(own)?.entry.rank ?? 0,
+      tag: best?.[0],
+      posts: best?.[1] ?? 0,
+    })
+  }
+  return works
+}
+
+function homesInFamilies(
+  union: Union,
+  entities: ReadonlyMap<string, Entity>,
+  keys: ReadonlyMap<string, FamilyKey>,
+  homes: Map<string, Home>,
+): number {
+  const rootOf = (ref: string) => {
+    const key = node('work', ref)
+    return union.has(key) ? union.find(key) : undefined
+  }
+  const collected = (root: string) => entities.get(root)?.members.find(own)?.entry.rank ?? 0
+  let added = 0
+  for (const entity of entities.values()) {
+    if (entity.kind !== 'character' || homes.has(entity.id)) continue
+    const places = new Map<string, number>()
+    for (const m of entity.members.filter(own)) {
+      for (const work of m.entry.works ?? []) {
+        const root = rootOf(work)
+        if (root && !places.has(root)) places.set(root, ROLES.length - 1)
+      }
+      for (const [work, role] of m.entry.roles ?? []) {
+        const root = rootOf(work)
+        if (root) places.set(root, Math.min(places.get(root) ?? ROLES.length, ROLES.indexOf(role)))
+      }
+    }
+    const [best] = [...places].sort(([a, x], [b, y]) => x - y || collected(b) - collected(a) || (a < b ? -1 : 1))
+    if (!best) continue
+    const key = keys.get(best[0])?.key
+    if (!key?.startsWith(TAGLESS)) continue
+    homes.set(entity.id, { tag: key, posts: null, tier: best[1], also: [] })
+    added++
+  }
+  return added
+}
+
 function partsOf(text: string): string[] {
   const tokens = qualifiers(text)
     .base.split(/[\s・·_=＝]+/)
@@ -640,8 +736,9 @@ function schema(db: Database): void {
   db.run('PRAGMA synchronous = OFF')
   db.run('CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
   db.run(
-    'CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT NOT NULL, medium TEXT, type TEXT, year INTEGER, origin TEXT)',
+    'CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT NOT NULL, medium TEXT, type TEXT, year INTEGER, origin TEXT, genres TEXT, nature TEXT)',
   )
+  db.run('CREATE TABLE families (entity TEXT PRIMARY KEY, key TEXT NOT NULL, tier INTEGER NOT NULL)')
   db.run(
     'CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL, rank REAL, tier INTEGER NOT NULL, own INTEGER NOT NULL)',
   )
@@ -715,6 +812,9 @@ export async function build(): Promise<void> {
   for (const s of staged) if (s.entry.family) families.set(s.entry.id.slice(TAG.length), s.entry.rank ?? null)
   const homes = homesOf(union, entities, parents, links, families, spread, copyrights)
   console.log(`build: ${homes.size} characters have a home tag`)
+  const keys = familyKeysOf(keyedWorks(union, entities, graph), links)
+  const familyHomes = homesInFamilies(union, entities, keys, homes)
+  console.log(`build: ${keys.size} works with no tag of their own have a family, ${familyHomes} characters their home`)
   const byRoot = new Map<string, string>()
   for (const [root, entity] of entities) byRoot.set(root, entity.id)
   const resolve = (kind: Kind, ref: string): string | undefined => {
@@ -739,8 +839,9 @@ export async function build(): Promise<void> {
     const db = new Database(path, { create: true })
     schema(db)
     const insertEntity = db.prepare(
-      'INSERT INTO entities (id, kind, medium, type, year, origin) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO entities (id, kind, medium, type, year, origin, genres, nature) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     )
+    const insertFamily = db.prepare('INSERT INTO families (entity, key, tier) VALUES (?, ?, ?)')
     const insertRef = db.prepare('INSERT INTO refs (entity, ref, rank, tier, own) VALUES (?, ?, ?, ?, ?)')
     const insertName = db.prepare(
       'INSERT INTO names (entity, ekind, text, lang, kind, source, flat, latin, qual, variant, support, pref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid',
@@ -761,14 +862,20 @@ export async function build(): Promise<void> {
           const spine = entity.members.find(own)?.entry
           const dated = entity.members.find((m) => m.entry.year)?.entry
           const origin = [...new Set(entity.members.flatMap((m) => m.entry.origin ?? []))]
+          const medium = mediumOf(entity)
+          const genres = genresOf(entity)
           insertEntity.run(
             entity.id,
             entity.kind,
-            mediumOf(entity),
+            medium === 'vn' ? 'game' : medium,
             spine?.type ?? null,
             spine?.year ?? dated?.year ?? null,
             origin.length > 0 ? origin.join(' ') : null,
+            genres.length > 0 ? genres.join(' ') : null,
+            entity.nature ?? null,
           )
+          const family = keys.get(root)
+          if (family) insertFamily.run(entity.id, family.key, family.tier)
         }
         const refs = new Map<string, number | null>()
         const heads = new Set<string>()
@@ -793,7 +900,10 @@ export async function build(): Promise<void> {
             if (id && id !== entity.id) related.add(id)
           }
         }
-        const titled = entity.kind === 'work' ? new Set(entity.members.filter(own).flatMap(ownTitles)) : undefined
+        const titled =
+          entity.kind === 'work' && entity.members.some(own)
+            ? new Set(entity.members.filter(own).flatMap(ownTitles))
+            : undefined
         for (const [ref, rank] of refs) {
           const named = !titled || !ref.startsWith(TAG) || titled.has(tagTitle(ref))
           insertRef.run(entity.id, ref, rank, heads.has(ref) ? 0 : 1, named ? 1 : 0)

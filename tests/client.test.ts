@@ -94,6 +94,10 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
         null,
         [],
         2021,
+        null,
+        [],
+        [],
+        'group',
       ],
       [1, 'c/x:1', [['Pip', 'en', 0, 0]], [['pip_(starfall_harbor)', 30]], [[2, 'w/x:2']], [], 0, 0, 0, 0, []],
       [
@@ -115,6 +119,10 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
         ['JP'],
         2019,
         'anime',
+        [],
+        ['rhythm', 'vn'],
+        null,
+        'bangumi-2',
       ],
     ] as const
     for (const row of rows) entity.add([...row], row[1], row[0])
@@ -132,6 +140,10 @@ test('tagged finds the entities of a Danbooru tag whatever its punctuation and q
       [[], 2021, null],
     ])
     expect(works[0]?.names).toEqual([{ text: 'Starfall Harbor', lang: 'en', kind: 'official' }])
+    expect(works.map((found) => [found.genres, found.nature, found.family])).toEqual([
+      [['rhythm', 'vn'], null, 'bangumi-2'],
+      [[], 'group', null],
+    ])
     expect((await names.tagged('pip_(anything)')).map((found) => found.id)).toEqual(['c/x:1'])
     expect(await names.tagged('pip', { kind: 'work' })).toEqual([])
     expect(await names.tagged('starfall')).toEqual([])

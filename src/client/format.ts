@@ -224,6 +224,9 @@ export interface EntityRow {
   year: number | null
   medium: string | null
   copyrights: string[]
+  genres: string[]
+  nature: string | null
+  family: string | null
 }
 
 const isInt = (value: unknown): value is number => Number.isSafeInteger(value)
@@ -273,6 +276,8 @@ const eidOf = (value: unknown): number | undefined => (isCount(value) ? value : 
 const refOf = (value: unknown): string | undefined =>
   typeof value === 'string' && value.indexOf(':') > 0 ? value : undefined
 
+const wordOf = (value: unknown): string | undefined => (typeof value === 'string' && value !== '' ? value : undefined)
+
 const countryOf = (value: unknown): string | undefined =>
   typeof value === 'string' && /^[A-Z]{2}$/.test(value) ? value : undefined
 
@@ -295,6 +300,9 @@ function entityRow(value: unknown): EntityRow | undefined {
     year = null,
     medium = null,
     rawCopyrights = [],
+    rawGenres = [],
+    nature = null,
+    family = null,
   ] = value
   if (!isCount(eid) || typeof id !== 'string') return undefined
   const kind: Kind | undefined = id.startsWith('w/') ? 'work' : id.startsWith('c/') ? 'character' : undefined
@@ -305,10 +313,13 @@ function entityRow(value: unknown): EntityRow | undefined {
   const reach = list(rawReach, eidOf)
   const refs = list(rawRefs, refOf)
   const origin = list(rawOrigin, countryOf)
-  const copyrights = list(rawCopyrights, (tag) => (typeof tag === 'string' && tag !== '' ? tag : undefined))
-  if (!names || !danbooru || !works || !reach || !refs || !origin || !copyrights) return undefined
+  const copyrights = list(rawCopyrights, wordOf)
+  const genres = list(rawGenres, wordOf)
+  if (!names || !danbooru || !works || !reach || !refs || !origin || !copyrights || !genres) return undefined
   if (home !== null && typeof home !== 'string') return undefined
   if ((year !== null && !isCount(year)) || (medium !== null && typeof medium !== 'string')) return undefined
+  if ((nature !== null && typeof nature !== 'string') || (family !== null && typeof family !== 'string'))
+    return undefined
   return {
     eid,
     id,
@@ -327,6 +338,9 @@ function entityRow(value: unknown): EntityRow | undefined {
     year,
     medium,
     copyrights,
+    genres,
+    nature,
+    family,
   }
 }
 

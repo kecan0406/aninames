@@ -1,6 +1,6 @@
 import type { Staged } from './build.ts'
 import { apart, type Copyrights, type Drawn, majorsOf, NO_COPYRIGHTS, ownersOf } from './copyrights.ts'
-import { closure, type WorkGraph, workGraph, workNames } from './families.ts'
+import { attachByTitleStart, closure, type WorkGraph, workGraph, workNames } from './families.ts'
 import { tiesOf } from './graph.ts'
 import { foldHan } from './han.ts'
 import type { Entry } from './model.ts'
@@ -563,7 +563,7 @@ function headsOf(
       earliest(exact.filter((work) => media.get(work) === usual)) ??
       named.toSorted((a, b) => (votes.get(b) ?? 0) - (votes.get(a) ?? 0) || year(a) - year(b) || byName(a, b))[0]
     family.reached = new Set(votes.keys())
-    if (!head) continue
+    if (!head || graph.natures.has(id)) continue
     family.works = [head]
     family.head = head
     for (const work of closure(graph.links, [head])) family.reached.add(work)
@@ -599,5 +599,7 @@ export function link(
   const graph = workGraph(union, staged, workTitles(union, staged), workNames(union, staged))
   const characters = attachCharacters(union, staged, graph, copyrights)
   console.log(`build: attached ${characters} characters by a name only one Bangumi character in reach has`)
+  const started = attachByTitleStart(union, staged, graph)
+  console.log(`build: ${started} copyright tags took the works whose titles start with their names`)
   return { union, graph }
 }

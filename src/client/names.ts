@@ -30,6 +30,9 @@ export interface Found {
   origin: string[]
   year: number | null
   medium: string | null
+  genres: string[]
+  nature: string | null
+  family: string | null
   score: number
   match: Match | null
   adult: boolean
@@ -153,6 +156,9 @@ function card(rows: EntityRow[], score: number, adult: boolean, match: Match | n
     origin,
     year: rows.find((row) => row.year !== null)?.year ?? null,
     medium: rows.find((row) => row.medium !== null)?.medium ?? null,
+    genres: [...new Set(rows.flatMap((row) => row.genres))],
+    nature: rows.find((row) => row.nature !== null)?.nature ?? null,
+    family: rows.find((row) => row.family !== null)?.family ?? null,
     score,
     match,
     adult,

@@ -1,6 +1,6 @@
 import { rename } from 'node:fs/promises'
 import { join } from 'node:path'
-import type { Entry, Kind, Name, Namespace, Ref, Source } from '../model.ts'
+import type { Entry, Kind, Name, Namespace, Nature, Ref, Source } from '../model.ts'
 import { ref, USER_AGENT } from '../model.ts'
 import { sleep } from '../net.ts'
 
@@ -121,7 +121,87 @@ const LABEL_LANGS = [
   'zh-my',
 ]
 
-type Group = Kind | 'linked'
+const NATURES: Record<string, Nature> = {
+  Q11338907: 'software',
+  Q1897589: 'software',
+  Q15618491: 'software',
+  Q7397: 'software',
+  Q137396449: 'software',
+  Q193564: 'software',
+  Q11446438: 'group',
+  Q11578153: 'group',
+  Q641066: 'group',
+  Q138304223: 'group',
+  Q126480223: 'group',
+  Q14635346: 'group',
+  Q105416259: 'group',
+  Q14514600: 'group',
+  Q2088357: 'group',
+  Q11664239: 'group',
+  Q891723: 'organization',
+  Q4830453: 'organization',
+  Q6881511: 'organization',
+  Q210167: 'organization',
+  Q1137109: 'organization',
+  Q1107679: 'organization',
+  Q18127: 'organization',
+  Q20739124: 'organization',
+  Q1114515: 'organization',
+  Q1320047: 'organization',
+  Q43229: 'organization',
+  Q334453: 'organization',
+  Q11396960: 'organization',
+  Q1762059: 'organization',
+  Q1916382: 'organization',
+  Q21980538: 'organization',
+  Q167037: 'organization',
+  Q18388277: 'organization',
+  Q1058914: 'organization',
+  Q18509232: 'organization',
+  Q18654742: 'organization',
+  Q18534542: 'organization',
+  Q76213979: 'organization',
+  Q76212517: 'organization',
+  Q1485500: 'organization',
+  Q114392939: 'organization',
+  Q35127: 'organization',
+  Q559856: 'organization',
+  Q6576792: 'organization',
+  Q59152282: 'organization',
+  Q102336293: 'organization',
+  Q122759350: 'organization',
+  Q81989119: 'organization',
+  Q2721136: 'organization',
+  Q16465919: 'organization',
+  Q133797182: 'organization',
+  Q984179: 'organization',
+  Q561068: 'organization',
+  Q1787375: 'organization',
+  Q15296520: 'organization',
+  Q41298: 'organization',
+  Q21886169: 'organization',
+  Q163740: 'organization',
+  Q1478443: 'organization',
+  Q8102: 'term',
+  Q12355361: 'term',
+  Q1142315: 'term',
+  Q27020041: 'term',
+  Q500834: 'term',
+  Q1478437: 'term',
+  Q34542827: 'term',
+}
+
+const SAYS_NOTHING = new Set(['Q167270', 'Q431289', 'Q21484471', 'Q14946528'])
+
+const NATURE_ORDER: readonly Nature[] = ['software', 'group', 'organization', 'term']
+
+export function natureOf(types: readonly string[]): Nature | undefined {
+  const said = types.filter((type) => !SAYS_NOTHING.has(type))
+  if (said.length === 0 || !said.every((type) => NATURES[type])) return undefined
+  return NATURE_ORDER.find((nature) => said.some((type) => NATURES[type] === nature))
+}
+
+type Group = Kind | 'linked' | 'natures'
 
 type Facet = 'ids' | 'label' | 'alias' | 'sitelinks' | 'date' | 'origin' | 'kana' | 'native' | 'works'
 
@@ -150,6 +230,8 @@ const SITELINKS = '?item wikibase:sitelinks ?v'
 
 const ORIGIN = '?item wdt:P495/wdt:P297 ?v'
 
+const NATURES_FILE = 'tag-natures'
+
 const QUERIES: Query[] = [
   { file: 'work-ids', group: 'work', facet: 'ids', pattern: idPattern(IDS.work) },
   { file: 'work-labels', group: 'work', facet: 'label', pattern: names('rdfs:label') },
@@ -172,6 +254,7 @@ const QUERIES: Query[] = [
   { file: 'linked-published', group: 'linked', facet: 'date', pattern: '?item wdt:P577 ?v' },
   { file: 'linked-started', group: 'linked', facet: 'date', pattern: '?item wdt:P580 ?v' },
   { file: 'linked-origin', group: 'linked', facet: 'origin', pattern: ORIGIN },
+  { file: NATURES_FILE, group: 'natures', facet: 'ids', pattern: '' },
 ]
 
 function kindOf(group: Group): Kind {
@@ -188,7 +271,15 @@ function itemSet(ids: Id[], endpoint: Endpoint): string {
   return `{ SELECT DISTINCT ?item WHERE { ${branches.join(' UNION ')} } }`
 }
 
+function naturesQuery(endpoint: Endpoint): string {
+  const flags = Object.keys(NATURES)
+    .map((q) => `wd:${q}`)
+    .join(' ')
+  return `${PREFIXES}SELECT DISTINCT ?v ?type WHERE { ${endpoint.hint} ?item wdt:P13236 ?v . VALUES ?flag { ${flags} } ?item wdt:P31 ?flag . ?item wdt:P31 ?type }`
+}
+
 function sparql(query: Query, endpoint: Endpoint, linked: string[]): string {
+  if (query.group === 'natures') return naturesQuery(endpoint)
   const vars = query.facet === 'ids' ? '?item ?p ?v' : '?item ?v'
   const set =
     query.group === 'linked'
@@ -471,7 +562,9 @@ function entryOf(q: string, kind: Kind, item: Item): Entry {
 
 async function* stage(raw: string): AsyncIterable<Entry> {
   const items: Record<Kind, Map<string, Item>> = { work: new Map(), character: new Map() }
-  for (const query of QUERIES) gather(items[kindOf(query.group)], query, await rowsOf(raw, query.file))
+  for (const query of QUERIES) {
+    if (query.group !== 'natures') gather(items[kindOf(query.group)], query, await rowsOf(raw, query.file))
+  }
   for (const [q, item] of items.character) {
     yield entryOf(q, 'character', item)
   }
@@ -479,6 +572,19 @@ async function* stage(raw: string): AsyncIterable<Entry> {
     if (!items.character.has(q)) {
       yield entryOf(q, 'work', item)
     }
+  }
+  const types = new Map<string, string[]>()
+  for (const row of await rowsOf(raw, NATURES_FILE)) {
+    const tag = row.v?.value
+    const type = qid(row.type)
+    if (!tag || !type) continue
+    const known = types.get(tag)
+    if (known) known.push(type)
+    else types.set(tag, [type])
+  }
+  for (const [tag, kinds] of types) {
+    const nature = natureOf(kinds)
+    if (nature) yield { id: ref('danbooru', tag), attach: true, nature, names: [] }
   }
 }
 

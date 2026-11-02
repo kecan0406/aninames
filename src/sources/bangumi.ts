@@ -1,6 +1,15 @@
 import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import { type Entry, type Name, type NameKind, type Ref, type Role, ref, type Source } from '../model.ts'
+import {
+  type Entry,
+  type GameGenre,
+  type Name,
+  type NameKind,
+  type Ref,
+  type Role,
+  ref,
+  type Source,
+} from '../model.ts'
 import { download, json } from '../net.ts'
 import { flat, hasHangul, hasKanji, isKana } from '../text.ts'
 
@@ -122,6 +131,12 @@ const BELOW = new Set([6, 1003, 1007, 4006, 4015, 4016])
 const BESIDE = new Set([2, 3, 4, 5, 10, 1005, 1006, 1010, 1015, 4002, 4003, 4010])
 
 const ADAPTATION = 1
+
+const GENRE_FIELD = '游戏类型'
+
+const RHYTHM = /(?<![a-z])v?r?mug(?![a-z])|音乐游戏|音樂遊戲|音游|リズムゲーム|音ゲー|rhythm|节奏/i
+
+const ADVENTURE = /(?<![a-z])(?:adv|avg|vn)(?![a-z])|visual novel|视觉小说|ノベル|アドベンチャー|galgame/i
 
 const SHARED = new Set([7, 8, 9, 11, 1011, 1012, 1013, 4007, 4008, 4009])
 
@@ -260,6 +275,15 @@ function typeOf(subject: Subject): string | undefined {
   return subject.platform === 1002 && tagged ? 'LIGHT_NOVEL' : undefined
 }
 
+export function gameGenres(stated: readonly string[], tags: readonly string[]): GameGenre[] {
+  const text = [...stated, ...tags].join(' ')
+  const out: GameGenre[] = []
+  if (RHYTHM.test(text)) out.push('rhythm')
+  if (ADVENTURE.test(text)) out.push('adventure')
+  if (out.length === 0 && stated.some((value) => value.trim())) out.push('other')
+  return out
+}
+
 function workOf(subject: Subject, type: string, chinese: boolean): Entry {
   const found = fields(subject.infobox)
   const nameLang = originOf(subject.name, chinese)
@@ -280,6 +304,11 @@ function workOf(subject: Subject, type: string, chinese: boolean): Entry {
   if (subject.nsfw) entry.adult = true
   const year = Number(subject.date?.slice(0, 4))
   if (year > 0) entry.year = year
+  if (type === 'GAME') {
+    const stated = found.flatMap(([, key, value]) => (key === GENRE_FIELD ? [value] : []))
+    const genres = gameGenres(stated, subject.meta_tags ?? [])
+    if (genres.length > 0) entry.genres = genres
+  }
   return entry
 }
 
@@ -350,7 +379,9 @@ const source: Source = {
       if (!type) continue
       const region = regionOf(subject.meta_tags ?? [])
       const entry = workOf(subject, type, region === 'zh')
-      if (type === 'GAME' && !cast.has(subject.id) && !entry.refs && (entry.rank ?? 0) < GAME_FAVORITES) continue
+      const kept =
+        cast.has(subject.id) || entry.refs || (entry.rank ?? 0) >= GAME_FAVORITES || entry.genres?.includes('rhythm')
+      if (type === 'GAME' && !kept) continue
       works.set(subject.id, { rank: entry.rank ?? 0, region })
       entries.set(subject.id, entry)
     }

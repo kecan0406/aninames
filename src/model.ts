@@ -37,6 +37,12 @@ export type Role = 'lead' | 'support' | 'minor'
 
 export const ROLES: readonly Role[] = ['lead', 'support', 'minor']
 
+export type GameGenre = 'rhythm' | 'adventure' | 'other'
+
+export type Genre = 'rhythm' | 'vn'
+
+export type Nature = 'group' | 'software' | 'organization' | 'term'
+
 export interface Name {
   text: string
   lang?: string
@@ -61,6 +67,8 @@ export interface Entry {
   type?: string
   year?: number
   origin?: string[]
+  genres?: GameGenre[]
+  nature?: Nature
 }
 
 export interface Source {

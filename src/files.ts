@@ -283,7 +283,8 @@ function keyTable(db: Database, layer: Layer, table: KeyTable, context: Context)
 
 const TAG_SQL: Record<'tag' | 'home', string> = {
   tag: `SELECT entity, substr(ref, 10) AS tag, max(rank) AS posts, min(tier) AS tier FROM refs
-WHERE ref GLOB 'danbooru:*' GROUP BY entity, ref`,
+WHERE ref GLOB 'danbooru:*' GROUP BY entity, ref
+UNION ALL SELECT entity, key AS tag, NULL AS posts, tier FROM families`,
   home: `SELECT entity, tag, posts, tier FROM homes UNION ALL
 SELECT c.entity, c.tag, h.posts, c.tier FROM copyrights c JOIN homes h ON h.entity = c.entity`,
 }
@@ -344,7 +345,8 @@ SELECT ids.id AS id,
     (SELECT ref FROM refs WHERE entity = ids.id AND ref NOT GLOB 'danbooru:*' GROUP BY ref ORDER BY ref)) AS refs,
   (SELECT tag FROM homes WHERE entity = ids.id) AS home,
   (SELECT json_group_array(tag) FROM copyrights WHERE entity = ids.id) AS copyrights,
-  e.origin AS origin, e.year AS year, e.medium AS medium
+  (SELECT key FROM families WHERE entity = ids.id) AS family,
+  e.origin AS origin, e.year AS year, e.medium AS medium, e.genres AS genres, e.nature AS nature
 FROM ids LEFT JOIN entities e ON e.id = ids.id ORDER BY ids.id`
 
 type NameSource = [
@@ -378,9 +380,12 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
         refs: string
         home: string | null
         copyrights: string
+        family: string | null
         origin: string | null
         year: number | null
         medium: string | null
+        genres: string | null
+        nature: string | null
       },
       []
     >(ENTITY_SQL)
@@ -423,6 +428,9 @@ function entityTable(db: Database, layer: Layer, context: Context): Writer {
           row.year,
           row.medium,
           JSON.parse(row.copyrights) as string[],
+          row.genres ? row.genres.split(' ') : [],
+          row.nature,
+          row.family,
         ]),
       ],
       row.id,

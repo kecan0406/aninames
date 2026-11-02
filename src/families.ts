@@ -1,6 +1,7 @@
 import type { Staged } from './build.ts'
 import { tiesOf } from './graph.ts'
-import { flat, japanese, titleKey } from './text.ts'
+import type { Nature } from './model.ts'
+import { flat, japanese, qualifiers, titleKey, titleWords } from './text.ts'
 import { node, type Union } from './union.ts'
 
 const BANGUMI = 'bangumi'
@@ -10,6 +11,20 @@ const HUB = 200
 const LATIN_TITLE = 4
 
 const MARKS = /[∀√∞≡≠≒∽∇∴]/gu
+
+const LEAST_LETTERS = 5
+
+const MOST_STARTING = 100
+
+const DOMINANT = 10
+
+const OPEN_QUALIFIERS = new Set(['series', 'franchise'])
+
+const NEAREST_HOPS = 2
+
+export const MOST_GROUP = 60
+
+const INHERITED = 2
 
 export interface Family {
   works: string[]
@@ -23,6 +38,7 @@ export interface WorkGraph {
   families: Map<string, Family>
   named: Map<string, string[]>
   years: Map<string, number>
+  natures: Map<string, Nature>
 }
 
 export function titleName(text: string): string {
@@ -160,8 +176,14 @@ export function workGraph(
   }
   const families = new Map<string, Family>()
   const named = new Map<string, string[]>()
+  const natures = new Map<string, Nature>()
+  for (const { entry } of staged) if (entry.nature) natures.set(entry.id, entry.nature)
   for (const { entry } of staged) {
     if (!entry.family) continue
+    if (natures.has(entry.id)) {
+      families.set(entry.id, { works: [], head: undefined, reached: new Set() })
+      continue
+    }
     const anchors = new Set<string>()
     const own = workRoot(entry.id)
     if (own && union.anchored(own)) anchors.add(own)
@@ -182,5 +204,131 @@ export function workGraph(
       works.toSorted((a, b) => year(a) - year(b) || (a < b ? -1 : a > b ? 1 : 0))[0]
     families.set(entry.id, { works, head, reached: closure(links, works) })
   }
-  return { links, titles, families, named, years }
+  return { links, titles, families, named, years, natures }
+}
+
+export function startsWith(title: readonly string[], words: readonly string[]): boolean {
+  return words.every((word, at) => title[at] === word)
+}
+
+export function dominantOf(ranks: ReadonlyMap<string, number>): string[] {
+  const top = Math.max(0, ...ranks.values())
+  return [...ranks.keys()].filter((root) => (ranks.get(root) ?? 0) * DOMINANT >= top).sort()
+}
+
+export function attachByTitleStart(union: Union, staged: readonly Staged[], graph: WorkGraph): number {
+  const starts = new Map<string, { words: string[]; root: string; rank: number }[]>()
+  for (const { source, entry } of staged) {
+    if (source !== BANGUMI || entry.attach || entry.kind !== 'work') continue
+    const at = node('work', entry.id)
+    if (!union.anchored(at)) continue
+    const root = union.find(at)
+    for (const name of entry.names) {
+      if (name.kind === 'reading' || japanese(name.text)) continue
+      const words = titleWords(name.text)
+      const first = words[0]
+      if (!first) continue
+      const list = starts.get(first)
+      const title = { words, root, rank: entry.rank ?? 0 }
+      if (list) list.push(title)
+      else starts.set(first, [title])
+    }
+  }
+  let attached = 0
+  for (const { entry } of staged) {
+    if (!entry.family || graph.natures.has(entry.id)) continue
+    const family = graph.families.get(entry.id)
+    if (!family || family.works.length > 0) continue
+    const { base, quals } = qualifiers(entry.id.slice(entry.id.indexOf(':') + 1).replace(/_/g, ' '))
+    if (!quals.every((qual) => OPEN_QUALIFIERS.has(qual))) continue
+    const words = titleWords(base)
+    if (words.join('').length < LEAST_LETTERS) continue
+    const found = new Map<string, number>()
+    for (const title of starts.get(words[0] ?? '') ?? []) {
+      if (startsWith(title.words, words)) found.set(title.root, Math.max(found.get(title.root) ?? 0, title.rank))
+    }
+    if (found.size === 0 || found.size > MOST_STARTING) continue
+    const works = dominantOf(found)
+    const year = (root: string) => graph.years.get(root) ?? Number.POSITIVE_INFINITY
+    family.works = works
+    family.head = works.toSorted((a, b) => year(a) - year(b))[0]
+    for (const work of closure(graph.links, works)) family.reached.add(work)
+    attached++
+  }
+  return attached
+}
+
+export interface KeyedWork {
+  key: string
+  year: number | undefined
+  rank: number
+  tag: string | undefined
+  posts: number
+}
+
+export interface FamilyKey {
+  key: string
+  tier: number
+}
+
+function nearestTag(
+  root: string,
+  works: ReadonlyMap<string, KeyedWork>,
+  links: ReadonlyMap<string, ReadonlySet<string>>,
+): string | undefined {
+  const seen = new Set([root])
+  let frontier = [root]
+  for (let hop = 0; hop < NEAREST_HOPS; hop++) {
+    const next: string[] = []
+    for (const at of frontier) {
+      for (const other of links.get(at) ?? []) {
+        if (seen.has(other)) continue
+        seen.add(other)
+        next.push(other)
+      }
+    }
+    const tagged = next.flatMap((at) => {
+      const work = works.get(at)
+      return work?.tag ? [work] : []
+    })
+    const [best] = tagged.sort((a, b) => b.posts - a.posts || ((a.tag ?? '') < (b.tag ?? '') ? -1 : 1))
+    if (best) return best.tag
+    frontier = next
+  }
+  return undefined
+}
+
+export function familyKeysOf(
+  works: ReadonlyMap<string, KeyedWork>,
+  links: ReadonlyMap<string, ReadonlySet<string>>,
+): Map<string, FamilyKey> {
+  const out = new Map<string, FamilyKey>()
+  const free = new Set<string>()
+  for (const [root, work] of works) {
+    if (work.tag) continue
+    const tag = nearestTag(root, works, links)
+    if (tag) out.set(root, { key: tag, tier: INHERITED })
+    else free.add(root)
+  }
+  const placed = new Set<string>()
+  for (const start of free) {
+    if (placed.has(start)) continue
+    placed.add(start)
+    const group = [start]
+    for (let at = 0; at < group.length; at++) {
+      for (const other of links.get(group[at] as string) ?? []) {
+        if (!free.has(other) || placed.has(other)) continue
+        placed.add(other)
+        group.push(other)
+      }
+    }
+    const year = (root: string) => works.get(root)?.year ?? Number.POSITIVE_INFINITY
+    const rank = (root: string) => works.get(root)?.rank ?? 0
+    const head = group.toSorted((a, b) => year(a) - year(b) || rank(b) - rank(a) || (a < b ? -1 : 1))[0] as string
+    for (const root of group) {
+      if (group.length > MOST_GROUP) out.set(root, { key: works.get(root)?.key ?? root, tier: 0 })
+      else out.set(root, { key: works.get(head)?.key ?? head, tier: root === head ? 0 : 1 })
+    }
+  }
+  return out
 }
