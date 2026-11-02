@@ -48,7 +48,7 @@ Built: 122,012 works and 213,713 characters, all Bangumi's. Two builds from the 
 
 `.github/workflows/release.yml` fetches every source, builds, packs and chunks every Sunday (and on demand), audits what it built (`eval`, then `mise run audit`: file hashes, row counts against the previous release's `stats.json`, frozen ids, and this client and the published one reading the new files), and only then publishes the files as a `data-<date>` release, keeping the four latest, and deploys `dist/site` to GitHub Pages as the static index. A run that fails before that publishes nothing and the last good site stays live. The latest release is always at `https://github.com/kecan0406/aninames/releases/latest/download/<file>`; ttheme searches the static index through the client.
 
-`.github/workflows/publish.yml` publishes the client to npm with trusted publishing when `package.json`'s version is one npm does not have; the package owner registers that workflow on npmjs.com once.
+`.github/workflows/publish.yml` publishes the client to npm with trusted publishing when `package.json`'s version is one npm does not have.
 
 ## Static index
 
