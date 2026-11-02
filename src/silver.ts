@@ -1,5 +1,6 @@
 import type { Staged } from './build.ts'
 import { readAll } from './build.ts'
+import { readCopyrights } from './copyrights.ts'
 import { link } from './spine.ts'
 import { node, Union } from './union.ts'
 
@@ -44,7 +45,7 @@ function groups(members: Staged[], local: Union, cluster: (key: string) => strin
 export async function silver(): Promise<void> {
   const { all } = await readAll()
   const { truth, local, members } = units(all)
-  const predicted = link(all, true)
+  const { union: predicted } = link(all, true, await readCopyrights())
   const truthSources = new Map<string, Set<string>>()
   for (const s of members) {
     const root = truth.find(node('character', s.entry.id))
@@ -68,6 +69,7 @@ export async function silver(): Promise<void> {
   let right = 0
   let wrong = 0
   let unknown = 0
+  let forms = 0
   const examples: string[] = []
   for (const list of groups(members, local, (key) => predicted.find(key)).values()) {
     const capped = list.slice(0, CAP)
@@ -81,14 +83,15 @@ export async function silver(): Promise<void> {
         if (ta === tb) right++
         else if (truthSources.get(ta)?.has(b.source) || truthSources.get(tb)?.has(a.source)) {
           wrong++
-          if (examples.length < 15) examples.push(`${a.key.slice(10)} + ${b.key.slice(10)}`)
+          if (a.key.includes('_(') || b.key.includes('_(')) forms++
+          else if (examples.length < 15) examples.push(`${a.key.slice(10)} + ${b.key.slice(10)}`)
         } else unknown++
       }
   }
   console.log(`\nsilver: character pairs that external ids link across sources, with those ids hidden from the merge`)
   console.log(`  recall    ${((100 * found) / positives).toFixed(1)}% (${found} of ${positives})`)
   console.log(
-    `  precision ${((100 * right) / (right + wrong)).toFixed(1)}% (${right} right, ${wrong} wrong, ${unknown} not judgeable)`,
+    `  precision ${((100 * right) / (right + wrong)).toFixed(1)}% (${right} right, ${wrong} wrong, ${unknown} not judgeable); ${((100 * right) / (right + wrong - forms)).toFixed(1)}% without the ${forms} that put a qualified Danbooru tag on its base`,
   )
   if (process.env.ANINAMES_MISSES) for (const example of examples) console.log(`    ✗ ${example}`)
 }

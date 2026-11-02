@@ -23,7 +23,7 @@ const staged = (source: string, entry: Entry): Staged => ({
 })
 
 test('only Bangumi makes entities; others join one by an id, a title or a name no other Bangumi entry in reach has', () => {
-  const union = link([
+  const { union } = link([
     staged('bangumi', {
       id: 'bangumi:247',
       kind: 'work',

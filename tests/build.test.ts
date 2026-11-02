@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test'
-import { adultCharactersOf, familyOf, groupsOf } from '../src/build.ts'
+import { adultCharactersOf } from '../src/build.ts'
+import { familyOf, groupsOf, titleName } from '../src/families.ts'
 import { chosenOf, homeOf, learnedOf, tierOf } from '../src/homes.ts'
+import { priorOf } from '../src/match.ts'
 import type { Entry, Ref } from '../src/model.ts'
 
 test('a copyright tag takes the same-title works the evidence ties together: the group its own name finds, else a group holding most of them, never a tie', () => {
@@ -150,4 +152,16 @@ test('a character is adult only when every work it is in, in any layer, is adult
     new Set(['w/vndb:v1']),
   )
   expect([...found]).toEqual(['c/parody'])
+})
+
+test('a symbol that names another work keeps its title apart, and other punctuation does not', () => {
+  expect(titleName('呪術廻戦≡')).not.toBe(titleName('呪術廻戦'))
+  expect(titleName('∀ガンダム')).not.toBe(titleName('ガンダム'))
+  expect(titleName('ぼっち・ざ・ろっく！')).toBe(titleName('ぼっち・ざ・ろっく!'))
+})
+
+test('a work with its own tag and an anime proper outrank a trailer', () => {
+  expect(priorOf('anime', 'UNKNOWN', false)).toBe(0)
+  expect(priorOf('game', 'GAME', true)).toBeGreaterThan(priorOf('anime', 'ONA', false) - 1)
+  expect(priorOf('anime', 'TV', true)).toBeGreaterThan(priorOf('anime', 'TV', false))
 })

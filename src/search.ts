@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { swapLayout, TOP, typing, weightOf } from './match.ts'
+import { priorOf, swapLayout, TOP, typing, weightOf } from './match.ts'
 import { type Kind, LAYERS, type Layer, type NameKind, SPINE } from './model.ts'
 import { editDistance, flat, latinKey, partKey, qualifiers, soundKeys } from './text.ts'
 
@@ -288,7 +288,8 @@ export class Index {
       (s) => `SELECT medium, type FROM ${s}.entities WHERE id = ?`,
       hit.id,
     )[0]
-    return (head?.medium === 'anime' ? 6 : 0) + (head?.type === 'TV' ? 2 : 0)
+    const tagged = this.refs(hit.id).some((ref) => ref.startsWith('danbooru:'))
+    return priorOf(head?.medium ?? null, head?.type ?? null, tagged)
   }
 
   related(id: string): string[] {

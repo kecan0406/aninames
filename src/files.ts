@@ -20,8 +20,8 @@ import {
   TRUSTED,
 } from './client/format.ts'
 import { compare } from './client/order.ts'
-import { weightOf } from './match.ts'
-import { LAYERS, type Layer, type NameKind, ROLES, SPINE } from './model.ts'
+import { priorOf, weightOf } from './match.ts'
+import { LAYERS, type Layer, type NameKind, SPINE } from './model.ts'
 import { licenses, notice, TERMS } from './pack.ts'
 import { flat, qualifiers } from './text.ts'
 
@@ -114,8 +114,8 @@ interface Scores {
 function scores(dbs: Map<Layer, Database>, eid: Numbering): Scores {
   const n = eid.size
   const best = new Float64Array(n)
-  const prior = new Int8Array(n)
-  const known = new Uint8Array(n)
+  const heads = new Map<number, [medium: string | null, type: string | null]>()
+  const tagged = new Uint8Array(n)
   const adult = new Uint8Array(n)
   const spaces = new Uint32Array(n)
   const bits = new Map<string, number>()
@@ -132,9 +132,14 @@ function scores(dbs: Map<Layer, Database>, eid: Numbering): Scores {
       )
       .iterate()) {
       const at = eid.get(row.id)
-      if (at === undefined || known[at]) continue
-      known[at] = 1
-      if (row.kind === 'work') prior[at] = (row.medium === 'anime' ? 6 : 0) + (row.type === 'TV' ? 2 : 0)
+      if (at === undefined || row.kind !== 'work' || heads.has(at)) continue
+      heads.set(at, [row.medium, row.type])
+    }
+    for (const row of db
+      .query<{ entity: string }, []>("SELECT DISTINCT entity FROM refs WHERE ref GLOB 'danbooru:*'")
+      .iterate()) {
+      const at = eid.get(row.entity)
+      if (at !== undefined) tagged[at] = 1
     }
     for (const row of db.query<{ entity: string }, []>('SELECT entity FROM adults').iterate()) {
       const at = eid.get(row.entity)
@@ -188,7 +193,8 @@ function scores(dbs: Map<Layer, Database>, eid: Numbering): Scores {
     for (let mask = spaces[at] ?? 0; mask; mask &= mask - 1) count++
     out.rank[at] = Math.round(rank * 1000)
     out.standing[at] = Math.round(standing * 1000)
-    out.extra[at] = work ? (prior[at] ?? 0) : Math.min(10, 2 * Math.max(0, count - 1))
+    const [medium = null, type = null] = heads.get(at) ?? []
+    out.extra[at] = work ? priorOf(medium, type, tagged[at] === 1) : Math.min(10, 2 * Math.max(0, count - 1))
   }
   return out
 }
@@ -276,10 +282,10 @@ function keyTable(db: Database, layer: Layer, table: KeyTable, context: Context)
 }
 
 const TAG_SQL: Record<'tag' | 'home', string> = {
-  tag: `SELECT entity, substr(ref, 10) AS tag, max(rank) AS posts FROM refs
+  tag: `SELECT entity, substr(ref, 10) AS tag, max(rank) AS posts, min(tier) AS tier FROM refs
 WHERE ref GLOB 'danbooru:*' GROUP BY entity, ref`,
   home: `SELECT entity, tag, posts, tier FROM homes UNION ALL
-SELECT c.entity, c.tag, h.posts, ${ROLES.length - 1} AS tier FROM copyrights c JOIN homes h ON h.entity = c.entity`,
+SELECT c.entity, c.tag, h.posts, h.tier AS tier FROM copyrights c JOIN homes h ON h.entity = c.entity`,
 }
 
 function tagTable(db: Database, layer: Layer, table: 'tag' | 'home', context: Context): Writer {
@@ -310,7 +316,7 @@ function tagTable(db: Database, layer: Layer, table: 'tag' | 'home', context: Co
         score.rank[at],
         score.standing[at],
         score.extra[at],
-        ...(tier === undefined ? [] : [tier]),
+        ...(tier === undefined || (table === 'tag' && tier === 0) ? [] : [tier]),
       ],
       key,
     )

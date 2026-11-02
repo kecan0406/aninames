@@ -7,6 +7,10 @@ const SURE_POSTS = 5
 
 const OWNED = 0.8
 
+const MAJOR = 0.5
+
+const CONFIDENCE = 1.96
+
 export interface Drawn {
   posts: number
   works: readonly (readonly [tag: string, posts: number])[]
@@ -39,12 +43,27 @@ export function drawnOf(tags: Iterable<string>, copyrights: Copyrights): Drawn |
   return undefined
 }
 
+export function surely(count: number, posts: number, share: number): boolean {
+  if (posts <= 0) return false
+  const p = count / posts
+  const z = CONFIDENCE
+  const low =
+    (p + (z * z) / (2 * posts) - z * Math.sqrt((p * (1 - p)) / posts + (z * z) / (4 * posts * posts))) /
+    (1 + (z * z) / posts)
+  return low >= share
+}
+
+export function majorsOf(drawn: Drawn): string[] {
+  return drawn.works.flatMap(([tag, count]) => (surely(count, drawn.posts, MAJOR) ? [tag] : []))
+}
+
 export function closestWork(drawn: Drawn, sizes: ReadonlyMap<string, number>): string | undefined {
+  if (majorsOf(drawn).length === 0) return undefined
   const cosine = (tag: string, count: number) => count / Math.sqrt(drawn.posts * Math.max(sizes.get(tag) ?? 0, count))
   return [...drawn.works].sort(([a, x], [b, y]) => cosine(b, y) - cosine(a, x) || (a < b ? -1 : a > b ? 1 : 0))[0]?.[0]
 }
 
-export function ownersOf(drawn: Drawn, home: string): string[] {
+export function ownersOf(drawn: Drawn, home?: string): string[] {
   return drawn.works.flatMap(([tag, count]) => (tag !== home && count >= OWNED * drawn.posts ? [tag] : []))
 }
 

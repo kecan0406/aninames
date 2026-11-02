@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite'
 import { mkdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type Copyrights, closestWork, type Drawn, drawnOf, ownersOf, readCopyrights } from './copyrights.ts'
+import { workNames as namesOfWorks, titleName, type WorkGraph } from './families.ts'
 import { alike, levelsOf, tiesOf, upward, wordsOf } from './graph.ts'
 import { type Appearance, type Choice, chosenOf, FLOOR, homeOf, learnedOf, tierOf, weightOf } from './homes.ts'
 import {
@@ -16,7 +17,7 @@ import {
   SPINE,
 } from './model.ts'
 import { load, NAMES } from './sources/index.ts'
-import { BANGUMI, link, MEDIUM_ORDER, type Medium, mediaOf, workTitles } from './spine.ts'
+import { BANGUMI, link, MEDIUM_ORDER, type Medium, mediaOf } from './spine.ts'
 import { readStage, stagePath } from './stage.ts'
 import {
   flat,
@@ -40,6 +41,7 @@ export interface Staged {
   layer: Layer
   entry: Entry
   popularity: number
+  below?: boolean
 }
 
 export async function readAll(): Promise<{ all: Staged[]; sources: Source[] }> {
@@ -87,8 +89,8 @@ interface Entity {
 function resolveEntities(
   staged: Staged[],
   copyrights: Copyrights,
-): { union: Union; entities: Map<string, Entity>; dropped: number } {
-  const union = link(staged, false, copyrights)
+): { union: Union; graph: WorkGraph; entities: Map<string, Entity>; dropped: number } {
+  const { union, graph } = link(staged, false, copyrights)
   const entities = new Map<string, Entity>()
   let dropped = 0
   for (const s of staged) {
@@ -113,92 +115,10 @@ function resolveEntities(
     }
     entity.members.push(s)
   }
-  return { union, entities, dropped }
+  return { union, graph, entities, dropped }
 }
 
 const own = (s: Staged) => s.source === BANGUMI
-
-const HUB = 200
-
-export function groupsOf(nodes: readonly string[], tied: (a: string, b: string) => boolean): string[][] {
-  const parent = new Map(nodes.map((at) => [at, at]))
-  const find = (at: string): string => {
-    let root = at
-    for (let next = parent.get(root); next !== undefined && next !== root; next = parent.get(root)) root = next
-    return root
-  }
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
-      const a = nodes[i] as string
-      const b = nodes[j] as string
-      const ra = find(a)
-      const rb = find(b)
-      if (ra !== rb && tied(a, b)) parent.set(rb, ra)
-    }
-  }
-  const groups = new Map<string, string[]>()
-  for (const at of nodes) {
-    const root = find(at)
-    const group = groups.get(root)
-    if (group) group.push(at)
-    else groups.set(root, [at])
-  }
-  return [...groups.values()]
-}
-
-export function familyOf(
-  groups: readonly string[][],
-  anchors: ReadonlySet<string>,
-  named: ReadonlySet<string> = new Set(),
-): string[] {
-  const anchored = groups.filter((group) => group.some((at) => anchors.has(at)))
-  if (anchored.length > 0) return anchored.flat()
-  const titled = groups.filter((group) => group.some((at) => named.has(at)))
-  if (titled.length === 1) return titled[0] ?? []
-  const [largest = [], second = []] = [...groups].sort((a, b) => b.length - a.length)
-  if (groups.length <= 1) return largest
-  const total = groups.reduce((sum, group) => sum + group.length, 0)
-  return largest.length >= 2 && largest.length > second.length && largest.length * 2 > total ? largest : []
-}
-
-function firstYear(entity: Entity): number {
-  let first = Number.POSITIVE_INFINITY
-  for (const m of entity.members) if (!m.entry.attach && m.entry.year) first = Math.min(first, m.entry.year)
-  return first
-}
-
-function meets(a: ReadonlySet<string> | undefined, b: ReadonlySet<string> | undefined, keep = (_: string) => true) {
-  if (!a || !b) return false
-  const [small, large] = a.size < b.size ? [a, b] : [b, a]
-  for (const at of small) if (large.has(at) && keep(at)) return true
-  return false
-}
-
-function linksOf(union: Union, entities: Map<string, Entity>): Map<string, Set<string>> {
-  const links = new Map<string, Set<string>>()
-  const tie = (a: string, b: string) => {
-    for (const [from, to] of [
-      [a, b],
-      [b, a],
-    ] as const) {
-      const set = links.get(from) ?? new Set<string>()
-      set.add(to)
-      links.set(from, set)
-    }
-  }
-  for (const [root, entity] of entities) {
-    if (entity.kind !== 'work') continue
-    for (const m of entity.members) {
-      if (!own(m)) continue
-      for (const other of tiesOf(m.entry)) {
-        const key = node('work', other)
-        const there = union.has(key) ? union.find(key) : undefined
-        if (there && there !== root) tie(root, there)
-      }
-    }
-  }
-  return links
-}
 
 function parentsOf(union: Union, entities: Map<string, Entity>): Map<string, Set<string>> {
   const parents = new Map<string, Set<string>>()
@@ -219,37 +139,16 @@ function parentsOf(union: Union, entities: Map<string, Entity>): Map<string, Set
   return parents
 }
 
-const LATIN_TITLE = 4
-
 function attachEntries(
   union: Union,
   staged: Staged[],
   entities: Map<string, Entity>,
-  links: ReadonlyMap<string, ReadonlySet<string>>,
-  titles: ReadonlyMap<string, ReadonlySet<string>>,
+  graph: WorkGraph,
 ): { attached: number; missed: number; spread: Map<string, Set<string>> } {
-  const workNames = new Map<string, Set<string>>()
-  for (const [root, entity] of entities) {
-    if (entity.kind !== 'work') continue
-    for (const m of entity.members) {
-      for (const name of m.entry.names) {
-        if (!japanese(name.text)) continue
-        const key = flat(name.text)
-        if (!key) continue
-        let roots = workNames.get(key)
-        if (!roots) {
-          roots = new Set()
-          workNames.set(key, roots)
-        }
-        roots.add(root)
-      }
-    }
-  }
+  const workNames = namesOfWorks(union, staged)
   const characterNames = new Map<string, Set<string>>()
   const characterWorks = new Map<string, Set<string>>()
-  const neighbours = new Map<string, Set<string>>()
-  const cast = new Map<string, Set<string>>()
-  const casts = new Map<string, Set<string>>()
+  const neighbours = graph.links
   const remember = (map: Map<string, Set<string>>, key: string, value: string) => {
     const set = map.get(key) ?? new Set<string>()
     set.add(value)
@@ -261,24 +160,11 @@ function attachEntries(
   }
   for (const [root, entity] of entities) {
     for (const m of entity.members) {
-      if (entity.kind === 'work') {
-        if (!own(m)) continue
-        for (const other of tiesOf(m.entry)) {
-          const there = workRoot(other)
-          if (there && there !== root) {
-            remember(neighbours, root, there)
-            remember(neighbours, there, root)
-          }
-        }
-        continue
-      }
+      if (entity.kind === 'work') continue
       if (own(m)) {
         for (const work of m.entry.works ?? []) {
           const there = workRoot(work)
-          if (!there) continue
-          remember(characterWorks, root, there)
-          remember(cast, there, root)
-          remember(casts, root, there)
+          if (there) remember(characterWorks, root, there)
         }
       }
       for (const name of m.entry.names) {
@@ -315,41 +201,6 @@ function attachEntries(
     const inCast = [...roots].filter((root) => [...(characterWorks.get(root) ?? [])].some((work) => context.has(work)))
     return inCast.length === 1 ? entities.get(inCast[0] ?? '') : undefined
   }
-  const small = (character: string) => (casts.get(character)?.size ?? 0) <= HUB
-  const tied = (a: string, b: string) =>
-    (links.get(a)?.has(b) ?? false) || meets(links.get(a), links.get(b)) || meets(cast.get(a), cast.get(b), small)
-  const familyFor = (entry: Entry): { targets: Entity[]; head: Entity | undefined; reached: Set<string> } => {
-    const anchors = new Set<string>()
-    const own = workRoot(entry.id)
-    if (own && entities.has(own)) anchors.add(own)
-    const candidates = new Set(anchors)
-    const titledBy = (text: string) => {
-      const key = titleKey(text)
-      if (japanese(text)) return workNames.get(flat(text)) ?? new Set<string>()
-      return (key.replace(/\s+/g, '').length >= LATIN_TITLE ? titles.get(key) : undefined) ?? new Set<string>()
-    }
-    for (const text of entry.link ?? []) for (const root of titledBy(text)) candidates.add(root)
-    const named = new Set(
-      entry.names.filter((name) => name.kind === 'main').flatMap((name) => [...titledBy(name.text)]),
-    )
-    const chosen = familyOf(groupsOf([...candidates], tied), anchors, named)
-    const head =
-      chosen.find((root) => anchors.has(root)) ??
-      chosen.toSorted((a, b) => {
-        const [x, y] = [entities.get(a), entities.get(b)]
-        return (x && y ? firstYear(x) - firstYear(y) : 0) || (a < b ? -1 : a > b ? 1 : 0)
-      })[0]
-    const reached = new Set(chosen)
-    for (const queue = [...chosen]; queue.length > 0; ) {
-      for (const other of links.get(queue.pop() as string) ?? []) {
-        if (reached.has(other)) continue
-        reached.add(other)
-        queue.push(other)
-      }
-    }
-    for (const root of chosen) reached.delete(root)
-    return { targets: chosen.flatMap((root) => entities.get(root) ?? []), head: entities.get(head ?? ''), reached }
-  }
   const spread = new Map<string, Set<string>>()
   let attached = 0
   let missed = 0
@@ -365,11 +216,17 @@ function attachEntries(
       continue
     }
     if (entry.family) {
-      const { targets, head, reached } = familyFor(entry)
-      const tag: Staged = { ...s, entry: { id: entry.id, kind: 'work', attach: true, names: [] }, popularity: 0 }
-      for (const found of targets) found.members.push(found === head ? s : tag)
+      const { works, head, reached } = graph.families.get(entry.id) ?? { works: [], reached: new Set<string>() }
+      const rank = entry.rank === undefined ? {} : { rank: entry.rank }
+      const tag: Staged = {
+        ...s,
+        entry: { id: entry.id, kind: 'work', attach: true, names: [], ...rank },
+        popularity: 0,
+        below: true,
+      }
+      for (const root of works) entities.get(root)?.members.push(root === head ? s : tag)
       for (const root of reached) remember(spread, root, entry.id.slice(TAG.length))
-      if (targets.length > 0) attached++
+      if (works.length > 0) attached++
       else missed++
       continue
     }
@@ -387,7 +244,7 @@ function attachEntries(
     const targets: Entity[] = target ? [target] : []
     if (!target && entry.link?.length && kinds.includes('work')) {
       const roots = new Set<string>()
-      for (const text of entry.link) for (const root of workNames.get(flat(text)) ?? []) roots.add(root)
+      for (const text of entry.link) for (const root of workNames.get(titleName(text)) ?? []) roots.add(root)
       const media = new Set<Medium | null>(mediaOf(s))
       const fitting = [...roots].flatMap((root) => {
         const found = entities.get(root)
@@ -607,17 +464,27 @@ interface Row {
   support: number
 }
 
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
+
+function langIn(lang: string | null, text: string): string | null {
+  if (lang === null || lang === 'ja' || lang === 'ko' || lang === 'zh' || lang.startsWith('zh-')) return lang
+  if (!CJK.test(text)) return lang
+  if (/\p{Script=Hangul}/u.test(text)) return 'ko'
+  return /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text) ? 'ja' : null
+}
+
 function namesOf(entity: Entity, layer: Layer, titles: Map<string, Set<string>>): Row[] {
   const rows: Row[] = []
   const seen = new Set<string>()
   const push = (name: Name, source: string, qual: string | null, unlikely = false) => {
     const text = name.text.normalize('NFC').trim()
     if (!text) return
-    const key = `${text}\u0000${name.lang ?? ''}\u0000${name.kind}`
+    const lang = langIn(name.lang ?? null, text)
+    const key = `${text}\u0000${lang ?? ''}\u0000${name.kind}`
     if (seen.has(key)) return
     seen.add(key)
     const variant = unlikely || (qual !== null && !titles.has(titleKey(qual)))
-    rows.push({ entity: entity.id, text, lang: name.lang ?? null, kind: name.kind, source, qual, variant, support: 0 })
+    rows.push({ entity: entity.id, text, lang, kind: name.kind, source, qual, variant, support: 0 })
   }
   for (const m of entity.members) {
     if (m.layer !== layer) continue
@@ -646,14 +513,14 @@ function namesOf(entity: Entity, layer: Layer, titles: Map<string, Set<string>>)
 }
 
 const KIND_ORDER: Record<NameKind, number> = {
-  main: 0,
   official: 0,
-  synonym: 1,
-  short: 2,
-  reading: 3,
-  redirect: 4,
-  section: 5,
-  generated: 6,
+  main: 1,
+  synonym: 2,
+  short: 3,
+  reading: 4,
+  redirect: 5,
+  section: 6,
+  generated: 7,
 }
 
 const SOURCE_ORDER = ['wikidata', 'anidb', 'vndb', 'aod', 'bangumi', 'kowiki', 'anissia', 'danbooru']
@@ -671,8 +538,6 @@ function backersOf(entity: Entity): Map<string, number> {
   return new Map([...sets].map(([key, set]) => [key, set.size]))
 }
 
-const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u
-
 function written(lang: string, text: string): boolean {
   if (lang === 'ja') return true
   if (lang === 'ko') return /\p{Script=Hangul}/u.test(text)
@@ -685,13 +550,34 @@ function ahead(a: readonly number[], b: readonly number[]): boolean {
   return false
 }
 
-function bestOf(rows: Row[], backers: ReadonlyMap<string, number>): Map<string, { row: Row; key: number[] }> {
+function wordsIn(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+}
+
+function titleWordsOf(entity: Entity): Set<string> {
+  const words = new Set<string>()
+  for (const m of entity.members) {
+    if (!m.entry.id.startsWith(TAG)) continue
+    for (const qual of qualifiers(m.entry.id.slice(TAG.length)).quals) for (const word of wordsIn(qual)) words.add(word)
+  }
+  return words
+}
+
+function bestOf(
+  rows: Row[],
+  backers: ReadonlyMap<string, number>,
+  titled: ReadonlySet<string>,
+): Map<string, { row: Row; key: number[] }> {
   const out = new Map<string, { row: Row; key: number[] }>()
   rows.forEach((row, at) => {
     if (!row.lang || row.qual !== null || row.variant || !written(row.lang, row.text)) return
     const source = SOURCE_ORDER.indexOf(row.source)
     const key = [
       KIND_ORDER[row.kind],
+      Number(row.text.includes('(') || wordsIn(row.text).some((word) => titled.has(word))),
       -(backers.get(flat(row.text)) ?? 1),
       source < 0 ? SOURCE_ORDER.length : source,
       at,
@@ -704,11 +590,12 @@ function bestOf(rows: Row[], backers: ReadonlyMap<string, number>): Map<string, 
 
 function preferencesOf(entity: Entity, layer: Layer, rows: Row[], titles: Map<string, Set<string>>): Map<Row, number> {
   const backers = backersOf(entity)
+  const titled = entity.kind === 'character' ? titleWordsOf(entity) : new Set<string>()
   const others = [...new Set(entity.members.map((m) => m.layer))]
     .filter((other) => other !== layer)
-    .map((other) => bestOf(namesOf(entity, other, titles), backers))
+    .map((other) => bestOf(namesOf(entity, other, titles), backers, titled))
   const out = new Map<Row, number>()
-  for (const [lang, { row, key }] of bestOf(rows, backers)) {
+  for (const [lang, { row, key }] of bestOf(rows, backers, titled)) {
     out.set(row, others.filter((other) => ahead(other.get(lang)?.key ?? [Infinity], key)).length)
   }
   return out
@@ -737,7 +624,7 @@ function schema(db: Database): void {
   db.run(
     'CREATE TABLE entities (id TEXT PRIMARY KEY, kind TEXT NOT NULL, medium TEXT, type TEXT, year INTEGER, origin TEXT)',
   )
-  db.run('CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL, rank REAL)')
+  db.run('CREATE TABLE refs (entity TEXT NOT NULL, ref TEXT NOT NULL, rank REAL, tier INTEGER NOT NULL)')
   db.run(
     'CREATE TABLE names (rowid INTEGER PRIMARY KEY, entity TEXT NOT NULL, ekind TEXT NOT NULL, text TEXT NOT NULL, lang TEXT, kind TEXT NOT NULL, source TEXT NOT NULL, flat TEXT NOT NULL, latin TEXT NOT NULL, qual TEXT, variant INTEGER NOT NULL, support INTEGER NOT NULL, pref INTEGER)',
   )
@@ -793,10 +680,9 @@ export async function build(): Promise<void> {
   const started = performance.now()
   const { all: staged, sources } = await readAll()
   const copyrights = await readCopyrights()
-  const { union, entities, dropped } = resolveEntities(staged, copyrights)
-  const titles = workTitles(union, staged)
-  const links = linksOf(union, entities)
-  const { attached, missed, spread } = attachEntries(union, staged, entities, links, titles)
+  const { union, graph, entities, dropped } = resolveEntities(staged, copyrights)
+  const { links, titles } = graph
+  const { attached, missed, spread } = attachEntries(union, staged, entities, graph)
   const parents = parentsOf(union, entities)
   console.log(
     `build: ${entities.size} entities from Bangumi, ${dropped} entries of other sources reached none; ${attached} attach entries placed, ${missed} found no entity`,
@@ -831,7 +717,7 @@ export async function build(): Promise<void> {
     const insertEntity = db.prepare(
       'INSERT INTO entities (id, kind, medium, type, year, origin) VALUES (?, ?, ?, ?, ?, ?)',
     )
-    const insertRef = db.prepare('INSERT INTO refs (entity, ref, rank) VALUES (?, ?, ?)')
+    const insertRef = db.prepare('INSERT INTO refs (entity, ref, rank, tier) VALUES (?, ?, ?, ?)')
     const insertName = db.prepare(
       'INSERT INTO names (entity, ekind, text, lang, kind, source, flat, latin, qual, variant, support, pref) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING rowid',
     )
@@ -861,12 +747,14 @@ export async function build(): Promise<void> {
           )
         }
         const refs = new Map<string, number | null>()
+        const heads = new Set<string>()
         let best = 0
         const works = new Set<string>()
         const related = new Set<string>()
         for (const m of entity.members) {
           if (m.layer !== layer) continue
           refs.set(m.entry.id, Math.max(refs.get(m.entry.id) ?? 0, m.entry.rank ?? 0) || null)
+          if (!m.below) heads.add(m.entry.id)
           for (const ref of m.entry.refs ?? []) {
             if (union.find(node(entity.kind, ref)) === root && !refs.has(ref)) refs.set(ref, null)
           }
@@ -881,7 +769,7 @@ export async function build(): Promise<void> {
             if (id && id !== entity.id) related.add(id)
           }
         }
-        for (const [ref, rank] of refs) insertRef.run(entity.id, ref, rank)
+        for (const [ref, rank] of refs) insertRef.run(entity.id, ref, rank, heads.has(ref) ? 0 : 1)
         if (best > 0) insertRank.run(entity.id, best)
         for (const work of works) insertWork.run(entity.id, work)
         const flagged =

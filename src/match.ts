@@ -20,6 +20,12 @@ export function weightOf(row: { kind: NameKind; variant: number; support: number
   return NAME_WEIGHT[row.kind] * (row.variant ? 0.9 : 1) * (row.support <= 1 && WEAK.has(row.kind) ? 0.93 : 1)
 }
 
+const TAGGED = 6
+
+export function priorOf(medium: string | null, type: string | null, tagged: boolean): number {
+  return (medium === 'anime' && type !== 'UNKNOWN' ? 6 : 0) + (type === 'TV' ? 2 : 0) + (tagged ? TAGGED : 0)
+}
+
 const INITIAL_JAMO = 'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ'
 
 export function typing(q: string): [string, string][] {
