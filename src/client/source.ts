@@ -11,6 +11,18 @@ export interface Source {
 
 export class Missing extends Error {}
 
+const MOST_BYTES = 64 * 2 ** 20
+
+async function bodyOf(url: URL, response: Response): Promise<Uint8Array> {
+  if (Number(response.headers.get('content-length') ?? 0) > MOST_BYTES) {
+    await response.body?.cancel()
+    throw new Error(`aninames: ${url} is larger than ${MOST_BYTES} bytes`)
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  if (bytes.byteLength > MOST_BYTES) throw new Error(`aninames: ${url} is larger than ${MOST_BYTES} bytes`)
+  return bytes
+}
+
 interface Fresh {
   text: string
   etag: string | null
@@ -46,9 +58,11 @@ export function httpSource(
     if (!response.ok && response.status !== 304) throw new Error(`aninames: ${url} answered ${response.status}`)
     return response
   }
+  const text = async (response: Response) =>
+    new TextDecoder().decode(await bodyOf(new URL('manifest.json', root), response))
   const source: Source = {
-    manifest: async (signal) => (await request('manifest.json', signal)).text(),
-    file: async (path, signal) => new Uint8Array(await (await request(checked(path), signal)).arrayBuffer()),
+    manifest: async (signal) => text(await request('manifest.json', signal)),
+    file: async (path, signal) => bodyOf(new URL(path, root), await request(checked(path), signal)),
   }
   revalidators.set(source, async ({ etag, modified }, signal) => {
     const response = await request('manifest.json', signal, {
@@ -57,7 +71,7 @@ export function httpSource(
     })
     if (response.status === 304) return undefined
     return {
-      text: await response.text(),
+      text: await text(response),
       etag: response.headers.get('etag'),
       modified: response.headers.get('last-modified'),
     }

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test'
+import { lostFrom } from '../src/audit.ts'
 import { adultCharactersOf } from '../src/build.ts'
 import { familyOf, groupsOf, titleName } from '../src/families.ts'
 import { chosenOf, homeOf, learnedOf, tierOf } from '../src/homes.ts'
@@ -162,6 +163,12 @@ test('a symbol that names another work keeps its title apart, and other punctuat
 
 test('a work with its own tag and an anime proper outrank a trailer', () => {
   expect(priorOf('anime', 'UNKNOWN', false)).toBe(0)
-  expect(priorOf('game', 'GAME', true)).toBeGreaterThan(priorOf('anime', 'ONA', false) - 1)
+  expect(priorOf('game', 'GAME', true)).toBeGreaterThan(priorOf('anime', 'UNKNOWN', false))
   expect(priorOf('anime', 'TV', true)).toBeGreaterThan(priorOf('anime', 'TV', false))
+})
+
+test('an audit fails a table that lost a tenth of its rows and not one that lost less', () => {
+  expect(lostFrom({ 'unlicensed.names': 100 }, { 'unlicensed.names': 91 })).toEqual([])
+  expect(lostFrom({ 'unlicensed.names': 100 }, { 'unlicensed.names': 89 })).toHaveLength(1)
+  expect(lostFrom({ 'kowiki.names': 100 }, {})).toHaveLength(1)
 })

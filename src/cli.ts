@@ -1,11 +1,12 @@
 import { mkdir } from 'node:fs/promises'
+import { audit } from './audit.ts'
 import { build, DIST } from './build.ts'
 import { compare } from './compare.ts'
 import { evaluate } from './eval.ts'
 import { chunk } from './files.ts'
 import { writeHan } from './han.ts'
 import { LAYERS, type Layer } from './model.ts'
-import { pack, unpack } from './pack.ts'
+import { pack } from './pack.ts'
 import { probe } from './probe.ts'
 import { Index } from './search.ts'
 import { silver } from './silver.ts'
@@ -33,15 +34,16 @@ async function main(argv: string[]): Promise<void> {
     case 'build':
       await build()
       return
-    case 'unpack':
-      await unpack(DIST)
-      return
     case 'pack':
       await pack(DIST)
       return
     case 'chunk':
       await chunk(DIST, Number(rest[0] ?? 32_768))
       return
+    case 'audit': {
+      process.exitCode = (await audit(DIST, rest[0], rest[1])) > 0 ? 1 : 0
+      return
+    }
     case 'compare': {
       const failed = await compare(DIST, layersFrom(), Number(rest[0] ?? 150))
       process.exitCode = failed ? 1 : 0
@@ -77,7 +79,7 @@ async function main(argv: string[]): Promise<void> {
     }
     default:
       throw new Error(
-        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, pack, chunk, search, eval, probe, compare, silver or han`,
+        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, pack, chunk, audit, search, eval, probe, compare, silver or han`,
       )
   }
 }

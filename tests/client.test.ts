@@ -192,3 +192,74 @@ test('cast lists the characters at home in a tag by role before posts', async ()
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('a lifted work stays below a seed that is not a book, and an anime passes its manga', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
+  try {
+    const here = present('unlicensed')
+    const flat = new Writer(join(dir, 'unlicensed', 'flat'), 4096)
+    flat.add(['starfall', 0, 1000, here, 500, 500, 0], 'starfall')
+    flat.add(['tidepool', 2, 1000, here, 500, 500, 0], 'tidepool')
+    flat.flush()
+    const entity = new Writer(join(dir, 'unlicensed', 'entity'), 4096)
+    const work = (eid: number, name: string, reach: number[], standing: number, extra: number, medium: string) => [
+      eid,
+      `w/x:${eid}`,
+      [[name, 'en', 1, 0]],
+      [],
+      [],
+      reach,
+      standing,
+      standing,
+      extra,
+      0,
+      [],
+      null,
+      [],
+      2020,
+      medium,
+    ]
+    for (const row of [
+      work(0, 'Starfall', [1], 500, 0, 'game'),
+      work(1, 'Starfall Trailer', [0], 900, 8, 'anime'),
+      work(2, 'Tidepool', [3], 500, 0, 'manga'),
+      work(3, 'Tidepool Anime', [2], 900, 8, 'anime'),
+    ])
+      entity.add(row, row[1] as string, row[0] as number)
+    entity.flush()
+    const empty = pack([], [])
+    const keys = Object.fromEntries(KEY_TABLES.map((table) => [table, empty]))
+    const layers = { unlicensed: { ...keys, flat: flat.packed(false), entity: entity.packed(true) } }
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ aninames: FORMAT, built: '', layers }))
+    const names = new Names(fileSource(dir))
+    expect((await names.search('starfall', { kind: 'work' })).map((found) => found.id)).toEqual(['w/x:0', 'w/x:1'])
+    expect((await names.search('tidepool', { kind: 'work' })).map((found) => found.id)).toEqual(['w/x:3', 'w/x:2'])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tagged lists a family head before the rest of its family, whatever their popularity', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'aninames-'))
+  try {
+    const here = present('unlicensed')
+    const tag = new Writer(join(dir, 'unlicensed', 'tag'), 4096)
+    tag.add(['starfall', 0, 500, here, 0, 100, 0], 'starfall')
+    tag.add(['starfall', 1, 500, here, 0, 900, 0, 1], 'starfall')
+    tag.flush()
+    const entity = new Writer(join(dir, 'unlicensed', 'entity'), 4096)
+    for (const eid of [0, 1]) {
+      const row = [eid, `w/x:${eid}`, [[`Starfall ${eid}`, 'en', 1, 0]], [['starfall', 500]], [], [], 0, 0, 0, 0, []]
+      entity.add(row, row[1] as string, eid)
+    }
+    entity.flush()
+    const empty = pack([], [])
+    const keys = Object.fromEntries(KEY_TABLES.map((table) => [table, empty]))
+    const layers = { unlicensed: { ...keys, tag: tag.packed(false), entity: entity.packed(true) } }
+    writeFileSync(join(dir, 'manifest.json'), JSON.stringify({ aninames: FORMAT, built: '', layers }))
+    const names = new Names(fileSource(dir))
+    expect((await names.tagged('starfall', { kind: 'work' })).map((found) => found.id)).toEqual(['w/x:0', 'w/x:1'])
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

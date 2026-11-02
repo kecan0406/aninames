@@ -47,6 +47,7 @@ export interface Trace {
 }
 
 const KEEP = 256
+const MOST_BYTES = 64 * 2 ** 20
 const PARALLEL = 16
 const TIMEOUT = 30_000
 const LABEL_LANGS = ['ja', 'en', 'ja-Latn', 'ko']
@@ -72,7 +73,7 @@ export function decode(path: string, bytes: Uint8Array): Rows {
   const where = parsePath(path)
   let rows: Rows | undefined
   try {
-    const text = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes
+    const text = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes, { maxOutputLength: MOST_BYTES }) : bytes
     rows = where && readRows(where.table, JSON.parse(new TextDecoder().decode(text)))
   } catch {
     rows = undefined

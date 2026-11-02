@@ -1,77 +1,56 @@
 # Roadmap
 
-What to improve next, each with what was seen or measured when it came up (2026-11-01, UTC). Since 2026-11-01 Bangumi is the spine: only its works and characters are entities and only its data gives structure; every other source attaches names, ids and tags. The first group keeps the weekly build and the releases running; the second fixes what a consumer shows; the last guards against regressions. Effort is a rough guess: small, medium or large.
+What to improve next, each with what was seen or measured when it came up (2026-11-02, UTC). Since 2026-11-01 Bangumi is the spine: only its works and characters are entities and only its data gives structure; every other source attaches names, ids and tags. The first group keeps the releases running; the second fixes what a consumer shows; the last guards against regressions. Effort is a rough guess: small, medium or large.
 
 ## Keep the build and the releases running
 
-### 1. Ship the spine to ttheme
+### 1. Register the npm trusted publisher
 
-Every entity id changes once (to `w/bangumi:<id>` and `c/bangumi:<id>`), so anything ttheme stored by id has to be looked up again by its Danbooru tag or refs. The static index stays format 1, so ttheme's current client reads the new files; the client in this repository also always reads `unlicensed` (the spine) and no longer requires `core`, which needs an npm release.
+`.github/workflows/publish.yml` publishes when `package.json`'s version is one npm does not have, with provenance and without a token. It fails with `ENEEDAUTH` until the package owner registers it on npmjs.com (owner `kecan0406`, repository `aninames`, workflow `publish.yml`), once; until then a version bump needs `npm publish` by hand behind two-factor.
 
-- Effort: small (aninames), medium (ttheme's stored ids).
+- Effort: small, the owner's.
 
-### 2. Publish to npm from the release workflow
+### 2. Danbooru is frozen at 2026-10-03
 
-Every client change is published by hand behind npm's two-factor prompt: 0.3.0, 0.3.1 and 0.3.2 went out the same day, and one attempt was lost to an approval that timed out (`E404` on `/-/v1/done`, nothing published). Trusted publishing from GitHub Actions would publish when `package.json`'s version changes, and add provenance.
+Danbooru has refused scripted requests (Cloudflare 403) since 2026-10-30, so builds stage the 10-03 raw data and read the post counts in `data/copyrights.json.gz`, counted once from a public copy. Since the spine it only supplies tags, aliases and post counts, never entities, so a frozen Danbooru no longer changes what the index holds; tags created since then are missing, and 2,339 tags with 50+ posts that no Bangumi character took on 2026-11-01 have no counts, and `tagged` and `cast` order by older post counts.
 
-- Needs: the package owner registers the workflow as a trusted publisher on npmjs.com, once.
-- Effort: small.
-
-### 3. A fallback that survives schema changes
-
-When a source fails, the weekly run unpacks the latest data release's SQLite and cuts the site from it with the current code. That breaks whenever the build adds a table or a column, and the releases before the spine hold the old entity ids, so a fallback to one of them would put union-era ids back on the site. Keeping the last good `dist/site` and redeploying it as it stands avoids cutting old data with new code.
-
-- Effort: small.
-
-### 4. Danbooru is frozen at 2026-10-03
-
-Danbooru has refused scripted requests (Cloudflare 403) since 2026-10-30, so builds stage the 10-03 raw data. Since the spine it only supplies tags, aliases and post counts, never entities, so a frozen Danbooru no longer changes what the index holds; tags created since then are missing, and `tagged` and `cast` order by older post counts.
-
-- Options: an API key (an account owner's) or Danbooru's BigQuery export (tags, aliases, implications).
+- Options: an API key (an account owner's), Danbooru's BigQuery export (tags, aliases, implications), or running `scripts/copyrights.py` against a newer copy.
 - Effort: medium.
 
 ## What a consumer shows
 
-### 5. Given-name tails
+### 3. Given-name tails
 
-A given name alone still lists every Bangumi namesake: `エミリア` returns Re:Zero's Emilia first and nine other Emilias after her, most of them eroge heroines. Keeping only characters with at least 20 Bangumi collects (11,259 of 213,713) and leaving adult ones out cut that list from 10 to 5 with the same first hit on all 15 such queries tried; with adult characters kept, as decided, the collects floor alone has to do it. A floor would be a tier in the key rows (format 1 allows appending a value), with the tail still found by its full name.
-
-- Effort: small to medium.
-
-### 6. Homes
-
-Of ttheme's commons, 120 get the home ttheme gives them, 17 another, 1 none and 62 are tags no Bangumi character takes (35 of those are beatmania IIDX version tags). The wrong ones:
-- Franchises Bangumi has no work for: `touhou`, `vocaloid`, `sound_voltex`. Their copyright tags match no Bangumi title, so their characters go home to one of the games (`embodiment_of_scarlet_devil`, `project_sekai`).
-- Collaboration or spin-off appearances that outnumber a character's own: VA-11 Hall-A's cast in Girls' Frontline, Toriel in Deltarune, Momoe Nagisa in Magia Record.
-- Options: let Wikidata's series and franchise items (P179, P8345, dropped from the fetch with the spine) place copyright tags on the Bangumi works they list, as evidence for tags only; or weigh Bangumi's cameo cast type below a minor role.
-- Effort: medium.
-
-### 7. Attachments still missed
-
-Bangumi has Jill Stingray (`Jill`, `Julianne Natalie Stingray`), KAITO and MEIKO, but no name of theirs matches the Danbooru tag's names uniquely. Costume and alternate-form tags now attach to their base character (`gotoh_hitori_(octopus)`, `togawa_sakiko_(exitus)`), which `silver` counts as wrong (2,724 of its 2,874).
-
-- Effort: small each.
-
-### 8. One preferred name per language
-
-Each layer marks its best name per entity and language with its rank among every layer's best (`names.pref`); the client marks it `preferred` and labels by it. "Case Closed" is the official English title of 名探偵コナン in both Wikidata and AniDB, and "Detective Conan" a synonym in both, so no rule that follows the sources picks it; names keep their source's word order (`en` "Shinji Ikari", `ja-Latn` "Ikari Shinji").
+A given name alone still lists every Bangumi namesake: `エミリア` returns Re:Zero's Emilia first and nine other Emilias after her, most of them eroge heroines. Keeping only characters with at least 20 Bangumi collects (11,259 of 213,713) cut that list from 10 to 5 with the same first hit on 15 such queries. ttheme shows no such list today: its work-scoped search asks for 50 characters and filters them by the work, so a floor would risk more than it saves. Left until a consumer shows the tail.
 
 - Effort: small to medium.
 
-### 9. Search ranking
+### 4. Tags that join two people
 
-Popularity is Bangumi's alone since the spine, so namesakes reorder: `sakura` puts 間桐桜 before 木之本桜 and `hina` 天野陽菜 before 空崎ヒナ, whom Danbooru draws far more. Bangumi's anniversary PVs and shorts (Blue Archive's) are works of their own and still show for the franchise's name.
+`son_gohan` and `grandpa_gohan` both attach to Bangumi's one 孫悟飯: the second tag's Japanese name is 孫悟飯 with a qualifier, and no count sets them apart since both are `dragon_ball`. Wikidata's two items join the same way, so `Grandpa Gohan` can read as a name of the wrong person. Two items of one source on one Bangumi entry are a signal nothing uses yet.
+
+- Effort: small to medium.
+
+### 5. One preferred name per language
+
+Each layer marks its best name per entity and language with its rank among every layer's best (`names.pref`); the client marks it `preferred` and labels by it. Of a hand-corrected table of ttheme's 41 names, 19 match. A two-word tag's words now beat other sources, which fixes most of them and gives `Yor Briar` over `Yor Forger`. "Case Closed" is the official English title of 名探偵コナン in both Wikidata and AniDB, and "Detective Conan" a synonym in both, so no rule that follows the sources picks it; a family head's `en` is that one work's (`The Hyrule Fantasy`), so ttheme titles a franchise from its tag.
+
+- Effort: small to medium.
+
+### 6. Search ranking
+
+Popularity is Bangumi's alone since the spine, so namesakes reorder: `sakura` puts 間桐桜 before 木之本桜 and `hina` 天野陽菜 before 空崎ヒナ, whom Danbooru draws far more. Averaging Bangumi's and Danbooru's log scales where both exist was tried on 2026-11-02: first hits rose by 17 of 4,617 probe queries (paired randomization test p = 0.12, MRR p = 0.20) and ttheme's Japanese queries from 154 to 158 of 162, and `사쿠라` fell to 佐倉杏子, so it was left out. `attack on titan` finds the entry Wikidata and AniDB gave that name (Season 3's), not the first season.
 
 - Effort: small to medium.
 
 ## Guards
 
-### 10. A cast and home check in eval
+### 7. A cast and home check in eval
 
-`mise run eval` checks pairs that must be one character and reports, without counting them, which of ttheme's tags resolve (`tests/ttheme.tsv`, 136 of 139 since the spine) and the homes of ttheme's commons (`tests/homes.tsv`). Left: a fixed set of works with their expected leads, and counting homes once the misses in 6 are settled. `tests/probe.json` was redrawn for the Bangumi ids, so probe figures before 2026-11-01 are on another sample.
+`mise run eval` checks pairs that must be one character and reports, without counting them, which of ttheme's tags resolve (`tests/ttheme.tsv`, 139 of 139) and the homes of ttheme's commons (`tests/homes.tsv`, 140 right and none wrong). Left: count both now they hold, and a fixed set of works with their expected leads. `tests/probe.json` was redrawn for the Bangumi ids, so probe figures before 2026-11-01 are on another sample.
 
 - Effort: small.
 
 ## Order
 
-1 first, with ttheme; then 5, which is what the spine leaves of "too many characters", then 3 and 6.
+1 first, by the owner; then 7, which turns what the 2026-11-02 work reached into a gate.

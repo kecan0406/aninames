@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release
@@ -15,15 +15,17 @@ jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 300
-    outputs:
-      fresh: ${{ steps.fresh.outcome }}
+    permissions:
+      contents: write
     env:
       ANINAMES_DANBOORU: https://shima.donmai.us
       ANINAMES_DANBOORU_LOGIN: ${{ secrets.DANBOORU_LOGIN }}
       ANINAMES_DANBOORU_KEY: ${{ secrets.DANBOORU_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: jdx/mise-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
       - run: bun install --frozen-lockfile
       - run: mise run ci
       - name: Keep the last answers of Danbooru and Wikidata for a week they do not answer
@@ -37,31 +39,27 @@ jobs:
             fi
           done
       - name: Build from the sources
-        id: fresh
-        continue-on-error: true
         run: |
           bun src/cli.ts fetch
           bun src/cli.ts stage
           bun src/cli.ts build
-          bun src/cli.ts eval
           bun src/cli.ts pack
+          bun src/cli.ts chunk
           for source in danbooru wikidata; do
             tar -czf "dist/release/$source.tar.gz" -C ".cache/raw/$source" .
           done
-      - name: Take the latest data release when the sources did not load
-        if: steps.fresh.outcome != 'success'
+      - name: Audit before anything is published
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          rm -rf dist
-          gh release download --pattern '*.sqlite.zst' --dir dist/release
-          bun src/cli.ts unpack
-      - run: bun src/cli.ts chunk
-      - uses: actions/upload-pages-artifact@v5
+          bun src/cli.ts eval
+          gh release download --pattern stats.json --dir .cache/previous || true
+          (cd .cache && npm pack @kecan0406/aninames --silent && mkdir -p client && tar -xzf kecan0406-aninames-*.tgz -C client)
+          bun src/cli.ts audit .cache/previous/stats.json "$PWD/.cache/client/package"
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist/site
       - name: Publish
-        if: steps.fresh.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -83,13 +81,4 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - id: deploy
-        uses: actions/deploy-pages@v5
-
-  stale:
-    needs: [release, pages]
-    if: needs.release.outputs.fresh != 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - run: |
-          echo "::error::The sources did not load, so the site was built from the latest data release"
-          exit 1
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

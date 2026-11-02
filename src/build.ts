@@ -576,7 +576,8 @@ function titleWordsOf(entity: Entity): Set<string> {
 function topTagOf(entity: Entity): string | undefined {
   const tagged = entity.members.filter((m) => m.entry.id.startsWith(TAG))
   const top = tagged.sort((a, b) => (b.entry.rank ?? 0) - (a.entry.rank ?? 0))[0]
-  return top && spokenAs(qualifiers(top.entry.id.slice(TAG.length).replace(/_/g, ' ')).base)
+  const base = top && qualifiers(top.entry.id.slice(TAG.length).replace(/_/g, ' ')).base
+  return base && /\s/.test(base) ? spokenAs(base) : undefined
 }
 
 function bestOf(
