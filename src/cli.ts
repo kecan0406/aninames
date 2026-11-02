@@ -1,9 +1,9 @@
 import { mkdir } from 'node:fs/promises'
-import { audit } from './audit.ts'
+import { audit, checkLive } from './audit.ts'
 import { build, DIST } from './build.ts'
 import { compare } from './compare.ts'
 import { evaluate } from './eval.ts'
-import { chunk } from './files.ts'
+import { chunk, DOMAIN } from './files.ts'
 import { writeHan } from './han.ts'
 import { LAYERS, type Layer } from './model.ts'
 import { pack } from './pack.ts'
@@ -44,6 +44,10 @@ async function main(argv: string[]): Promise<void> {
       process.exitCode = (await audit(DIST, rest[0], rest.slice(1))) > 0 ? 1 : 0
       return
     }
+    case 'contract': {
+      process.exitCode = (await checkLive(rest[0] ?? `https://${DOMAIN}`)) > 0 ? 1 : 0
+      return
+    }
     case 'compare': {
       const failed = await compare(DIST, layersFrom(), Number(rest[0] ?? 150))
       process.exitCode = failed ? 1 : 0
@@ -79,7 +83,7 @@ async function main(argv: string[]): Promise<void> {
     }
     default:
       throw new Error(
-        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, pack, chunk, audit, search, eval, probe, compare, silver or han`,
+        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, pack, chunk, audit, contract, search, eval, probe, compare, silver or han`,
       )
   }
 }

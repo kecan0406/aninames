@@ -51,11 +51,11 @@ Popularity is Bangumi's alone since the spine, so namesakes reorder: `sakura` pu
 
 ## Guards
 
-### 8. A probe floor in the audit
+### 8. Floors in the audit follow the data
 
-`mise run eval` reports, without counting them, which of ttheme's tags resolve (`tests/ttheme.tsv`, 139 of 139) and the homes of ttheme's commons (`tests/homes.tsv`, 140 right and none wrong); `mise run audit` holds floors for both (95% of the tags, at most 5 wrong homes) and for the leads of 17 casts (`tests/leads.tsv`), so a release that loses them does not publish. Left: a probe floor there too, since a ranking change only shows in `mise run probe`. `tests/probe.json` was redrawn for the Bangumi ids, so probe figures before 2026-11-01 are on another sample.
+`mise run eval` reports, without counting them, which of ttheme's tags resolve (`tests/ttheme.tsv`, 139 of 139) and the homes of ttheme's commons (`tests/homes.tsv`, 140 right and none wrong). `mise run audit` holds the floors a release must clear: 95% of the tags, 130 right homes and at most 5 wrong, the leads of 17 casts (`tests/leads.tsv`) and 85% of the probe sample found first. They are set just under today's figures, so a source's own drift may trip them; raise or lower them when one does, with what changed in the commit. `tests/probe.json` was redrawn for the Bangumi ids, so probe figures before 2026-11-01 are on another sample.
 
-- Effort: small.
+- Effort: small each time.
 
 ## Order
 

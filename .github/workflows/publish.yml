@@ -31,6 +31,7 @@ jobs:
       - run: npm install --global npm@11
       - run: bun install --frozen-lockfile
       - run: mise run ci
+      - run: bun src/cli.ts contract
       - run: mise run lib
       - name: Publish a version npm does not have yet
         run: |

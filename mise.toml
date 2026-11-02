@@ -28,6 +28,10 @@ run = "bun src/cli.ts chunk"
 description = "check the built files before they are published: mise run audit [previous stats.json] [published client dir…]"
 run = "bun src/cli.ts audit"
 
+[tasks.contract]
+description = "check that this client reads the live static index: mise run contract [url]"
+run = "bun src/cli.ts contract"
+
 [tasks.compare]
 description = "search the probe sample with SQLite and with the client over dist/site, and compare: mise run compare [per band]"
 run = "bun src/cli.ts compare"

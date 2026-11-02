@@ -4,9 +4,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { manifestPaths, readManifest } from './client/format.ts'
 import { Names } from './client/names.ts'
-import { fileSource, type Source } from './client/source.ts'
+import { fileSource, httpSource, type Source } from './client/source.ts'
 import { LAYERS } from './model.ts'
-import { FROZEN, type Frozen } from './probe.ts'
+import { FROZEN, type Frozen, forms } from './probe.ts'
 import { Index } from './search.ts'
 
 const TABLES = ['entities', 'names', 'refs', 'works', 'related', 'homes', 'copyrights', 'ranks', 'adults'] as const
@@ -22,6 +22,8 @@ const MOST_WRONG_HOMES = 5
 const LEAST_RIGHT_HOMES = 130
 
 const LEADS_READ = 60
+
+const LEAST_FIRST = 0.85
 
 export type Stats = Record<string, number>
 
@@ -99,6 +101,26 @@ async function lostTags(dir: string): Promise<string[]> {
   ]
 }
 
+async function lostRanking(dir: string): Promise<string[]> {
+  const chosen = (await Bun.file(FROZEN).json()) as Frozen
+  const index = new Index(dir)
+  let total = 0
+  let first = 0
+  for (const kind of ['work', 'character'] as const) {
+    for (const id of Object.values(chosen[kind]).flat()) {
+      const card = index.card(id)
+      if (!card) continue
+      for (const [, query] of forms(card)) {
+        total++
+        if (index.search(query, { kind, limit: 1 })[0]?.id === id) first++
+      }
+    }
+  }
+  index.close()
+  console.log(`audit: ${first} of ${total} sampled queries find their entity first`)
+  return first < total * LEAST_FIRST ? [`only ${first} of ${total} sampled queries find their entity first`] : []
+}
+
 async function lostLeads(names: Client): Promise<string[]> {
   const failed: string[] = []
   for (const [tag = '', wanted = ''] of await rows('leads.tsv')) {
@@ -158,6 +180,13 @@ export async function contract(names: Client): Promise<string[]> {
   return failed
 }
 
+export async function checkLive(url: string): Promise<number> {
+  const failed = await contract(new Names(httpSource(url)) as unknown as Client)
+  for (const what of failed) console.log(`::error::contract: ${what}`)
+  console.log(`contract: ${failed.length === 0 ? `this client reads ${url}` : `${failed.length} wrong`}`)
+  return failed.length
+}
+
 export async function audit(dir: string, previous?: string, published: readonly string[] = []): Promise<number> {
   const site = join(dir, 'site')
   const failed = brokenFiles(site)
@@ -165,7 +194,7 @@ export async function audit(dir: string, previous?: string, published: readonly 
   if (previous && existsSync(previous)) {
     failed.push(...lostFrom(JSON.parse(readFileSync(previous, 'utf8')) as Stats, stats))
   } else console.log('audit: no previous stats to compare with')
-  failed.push(...(await lostIds(dir)), ...(await lostTags(dir)))
+  failed.push(...(await lostIds(dir)), ...(await lostTags(dir)), ...(await lostRanking(dir)))
   const source: Source = fileSource(site)
   const names = new Names(source) as unknown as Client
   failed.push(...(await contract(names)).map((what) => `this client: ${what}`), ...(await lostLeads(names)))
