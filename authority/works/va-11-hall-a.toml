@@ -1,0 +1,43 @@
+name = "VA-11 Hall-A"
+native = "VA-11 Hall-A ヴァルハラ"
+danbooru = "va-11_hall-a"
+lead = "va-11-hall-a/jill-stingray"
+
+[art]
+steam = "447530"
+
+[[character]]
+id = "jill-stingray"
+native = ["ジル・スティングレイ"]
+danbooru = "jill_stingray"
+sites = { zerochan = "julianne_stingray" }
+person = "Jill Stingray"
+
+[[character]]
+id = "dorothy-haze"
+native = ["ドロシー・ヘイズ"]
+danbooru = "dorothy_haze"
+sites = { konachan = [], zerochan = [] }
+
+[[character]]
+id = "alma-armas"
+native = ["アルマ・アルマス"]
+danbooru = "alma_armas"
+sites = { konachan = [] }
+
+[[character]]
+id = "stella-hoshii"
+native = ["ステラ・ホシイ"]
+danbooru = "stella_hoshii"
+sites = { konachan = [] }
+
+[[character]]
+id = "sei-asagiri"
+native = ["セイ・P・アサギリ"]
+danbooru = "sei_asagiri"
+sites = { konachan = [] }
+person = "Sei Asagiri"
+
+[[character]]
+id = "valhalla"
+native = ["ヴァルハラ"]

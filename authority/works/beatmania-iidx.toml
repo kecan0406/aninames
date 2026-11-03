@@ -1,0 +1,213 @@
+name = "beatmania IIDX"
+danbooru = "beatmania_iidx"
+
+[[character]]
+id = "hinazuki-ririna"
+native = ["雛月理々奈", "リリス", "理々奈"]
+danbooru = "hinazuki_ririna"
+sites = { konachan = "lilith_(beatmania_iidx)" }
+
+[[character]]
+id = "hishimiya-tsugaru"
+native = ["菱宮津軽", "ツガル", "津軽"]
+danbooru = "hishimiya_tsugaru"
+sites = { yande = "tsugaru", zerochan = [] }
+
+[[character]]
+id = "kitami-erika"
+native = ["北見エリカ", "エリカ"]
+danbooru = "kitami_erika"
+sites = { konachan = "erika_(beatmania_iidx)", yande = "erika_(beatmania_iidx)", zerochan = [] }
+
+[[character]]
+id = "mizushiro-celica"
+native = ["水城セリカ", "セリカ"]
+danbooru = "mizushiro_celica"
+sites = { yande = "celica" }
+
+[[character]]
+id = "umegiri-ameto"
+native = ["梅桐天土", "天土"]
+danbooru = "umegiri_ameto"
+sites = { yande = "ameto", zerochan = "ameto_(beatmania)" }
+
+[[character]]
+id = "umegiri-hifumi"
+native = ["緋浮美"]
+danbooru = "umegiri_hifumi"
+sites = { konachan = "hifumi", yande = "hifumi_(beatmania)", zerochan = "hifumi_(beatmania)" }
+
+[[character]]
+id = "umegiri-iroha"
+native = ["梅桐彩葉", "彩葉"]
+danbooru = "umegiri_iroha"
+sites = { yande = "iroha_(beatmania)", zerochan = "iroha_(beatmania)" }
+
+[[character]]
+id = "iidx-1st-style"
+
+[[character]]
+id = "iidx-substream"
+
+[[character]]
+id = "beatmania-iidx-2nd-style"
+danbooru = "beatmania_iidx_2nd_style"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-3rd-style"
+danbooru = "beatmania_iidx_3rd_style"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-4th-style"
+danbooru = "beatmania_iidx_4th_style"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-5th-style"
+danbooru = "beatmania_iidx_5th_style"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-6th-style"
+danbooru = "beatmania_iidx_6th_style"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-7th-style"
+danbooru = "beatmania_iidx_7th_style"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-8th-style"
+danbooru = "beatmania_iidx_8th_style"
+sites = { danbooru = ["beatmania_iidx_8th_style", "hishimiya_tsugaru"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-9th-style"
+danbooru = "beatmania_iidx_9th_style"
+sites = { danbooru = ["beatmania_iidx_9th_style", "umegiri_iroha"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-10th-style"
+danbooru = "beatmania_iidx_10th_style"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-11-iidx-red"
+danbooru = "beatmania_iidx_11_iidx_red"
+sites = { danbooru = ["beatmania_iidx_11_iidx_red", "dj_sakura"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-12-happy-sky"
+danbooru = "beatmania_iidx_12_happy_sky"
+sites = { danbooru = ["beatmania_iidx_12_happy_sky", "sigsig_(bemani)"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-13-distorted"
+danbooru = "beatmania_iidx_13_distorted"
+sites = { danbooru = ["beatmania_iidx_13_distorted", "hinazuki_ririna"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-14-gold"
+danbooru = "beatmania_iidx_14_gold"
+sites = { danbooru = ["beatmania_iidx_14_gold", "umegiri_hifumi"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-15-dj-troopers"
+danbooru = "beatmania_iidx_15_dj_troopers"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-16-empress"
+danbooru = "beatmania_iidx_16_empress"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-17-sirius"
+danbooru = "beatmania_iidx_17_sirius"
+sites = { danbooru = ["beatmania_iidx_17_sirius", "bad_maniacs"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-18-resort-anthem"
+danbooru = "beatmania_iidx_18_resort_anthem"
+sites = { danbooru = ["beatmania_iidx_18_resort_anthem", "shakunetsu_beach_side_bunny"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-19-lincle"
+danbooru = "beatmania_iidx_19_lincle"
+sites = { danbooru = ["beatmania_iidx_19_lincle", "rche_(beatmania)"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-20-tricoro"
+danbooru = "beatmania_iidx_20_tricoro"
+sites = { danbooru = ["beatmania_iidx_20_tricoro", "houou_rinka"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-21-spada"
+danbooru = "beatmania_iidx_21_spada"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-22-pendual"
+danbooru = "beatmania_iidx_22_pendual"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-23-copula"
+danbooru = "beatmania_iidx_23_copula"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-24-sinobuz"
+danbooru = "beatmania_iidx_24_sinobuz"
+sites = { danbooru = ["beatmania_iidx_24_sinobuz", "kanzaki_saya"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-25-cannon-ballers"
+danbooru = "beatmania_iidx_25_cannon_ballers"
+sites = { danbooru = ["beatmania_iidx_25_cannon_ballers", "himmel_(beatmania)"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-26-rootage"
+danbooru = "beatmania_iidx_26_rootage"
+sites = { danbooru = ["beatmania_iidx_26_rootage", "creep_(beatmania)"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-27-heroic-verse"
+danbooru = "beatmania_iidx_27_heroic_verse"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-28-bistrover"
+danbooru = "beatmania_iidx_28_bistrover"
+sites = { danbooru = ["beatmania_iidx_28_bistrover", "polkamania"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-29-casthour"
+danbooru = "beatmania_iidx_29_casthour"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-30-resident"
+danbooru = "beatmania_iidx_30_resident"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-31-epolis"
+danbooru = "beatmania_iidx_31_epolis"
+sites = { danbooru = ["beatmania_iidx_31_epolis", "solar_eclipse_(bemani)"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-32-pinky-crush"
+danbooru = "beatmania_iidx_32_pinky_crush"
+sites = { danbooru = ["beatmania_iidx_32_pinky_crush", "flyaway_(beatmania)"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "beatmania-iidx-33-sparkle-shower"
+danbooru = "beatmania_iidx_33_sparkle_shower"
+sites = { danbooru = ["beatmania_iidx_33_sparkle_shower", "lilieze"], konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "iidx-34-zinrai"

@@ -1,0 +1,32 @@
+name = "Cyberpunk: Edgerunners"
+native = "サイバーパンク エッジランナーズ"
+danbooru = "cyberpunk:_edgerunners"
+lead = "cyberpunk-edgerunners/lucy"
+
+[art]
+tmdb = "tv/105248"
+anilist = 120377
+
+[[character]]
+id = "david-martinez"
+native = ["デイビッド・マルティネス", "デイヴィッド・マルティネス"]
+danbooru = "david_martinez"
+anilist = 284158
+
+[[character]]
+id = "lucy"
+native = ["ルーシー"]
+danbooru = "lucy_(cyberpunk)"
+sites = { zerochan = "lucyna_kushinada" }
+anilist = 284157
+
+[[character]]
+id = "rebecca"
+native = ["レベッカ"]
+danbooru = "rebecca_(cyberpunk)"
+sites = { zerochan = "rebecca_(cyberpunk:_edgerunners)" }
+anilist = 284163
+
+[[character]]
+id = "nightcity"
+native = ["ナイトシティ"]

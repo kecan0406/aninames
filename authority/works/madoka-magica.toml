@@ -1,0 +1,53 @@
+name = "Madoka Magica"
+native = "魔法少女まどか☆マギカ"
+danbooru = "mahou_shoujo_madoka_magica"
+lead = "madoka-magica/kaname-madoka"
+
+[art]
+tmdb = "tv/39218"
+anilist = 9756
+
+[[character]]
+id = "kaname-madoka"
+native = ["鹿目まどか"]
+danbooru = "kaname_madoka"
+anilist = 37832
+
+[[character]]
+id = "akemi-homura"
+native = ["暁美ほむら"]
+danbooru = "akemi_homura"
+anilist = 38005
+
+[[character]]
+id = "miki-sayaka"
+native = ["美樹さやか"]
+danbooru = "miki_sayaka"
+anilist = 38395
+
+[[character]]
+id = "sakura-kyoko"
+native = ["佐倉杏子"]
+danbooru = "sakura_kyoko"
+sites = { konachan = "sakura_kyouko", yande = "sakura_kyouko", zerochan = "sakura_kyouko" }
+anilist = 40006
+
+[[character]]
+id = "tomoe-mami"
+native = ["巴マミ"]
+danbooru = "tomoe_mami"
+anilist = 38194
+
+[[character]]
+id = "momoe-nagisa"
+native = ["百江なぎさ"]
+danbooru = "momoe_nagisa"
+anilist = 87785
+person = "Nagisa Momoe"
+
+[[character]]
+id = "kyubey"
+native = ["キュゥべえ"]
+danbooru = "kyubey"
+sites = { konachan = "kyuubee", zerochan = "kyubee" }
+anilist = 38566

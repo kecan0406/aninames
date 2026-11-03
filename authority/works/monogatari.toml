@@ -1,0 +1,32 @@
+name = "Monogatari"
+native = "〈物語〉シリーズ"
+danbooru = "monogatari_(series)"
+lead = "monogatari/senjougahara-hitagi"
+
+[art]
+tmdb = "tv/46195"
+anilist = 5081
+
+[[character]]
+id = "senjougahara-hitagi"
+native = ["戦場ヶ原ひたぎ"]
+danbooru = "senjougahara_hitagi"
+anilist = 22037
+
+[[character]]
+id = "oshino-shinobu"
+native = ["忍野忍"]
+danbooru = "oshino_shinobu"
+anilist = 23602
+
+[[character]]
+id = "hanekawa-tsubasa"
+native = ["羽川翼"]
+danbooru = "hanekawa_tsubasa"
+anilist = 22055
+
+[[character]]
+id = "sengoku-nadeko"
+native = ["千石撫子"]
+danbooru = "sengoku_nadeko"
+anilist = 22050

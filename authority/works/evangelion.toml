@@ -1,0 +1,42 @@
+name = "Evangelion"
+native = "エヴァンゲリオン"
+danbooru = "neon_genesis_evangelion"
+lead = "evangelion/eva-01"
+
+[art]
+tmdb = "tv/890"
+anilist = 30
+
+[[character]]
+id = "souryuu-asuka-langley"
+native = ["惣流・アスカ・ラングレー"]
+danbooru = "souryuu_asuka_langley"
+sites = { konachan = "soryu_asuka_langley" }
+anilist = 94
+
+[[character]]
+id = "ayanami-rei"
+native = ["綾波レイ"]
+danbooru = "ayanami_rei"
+anilist = 86
+
+[[character]]
+id = "nagisa-kaworu"
+native = ["渚カヲル"]
+danbooru = "nagisa_kaworu"
+anilist = 1261
+
+[[character]]
+id = "katsuragi-misato"
+native = ["葛城ミサト"]
+danbooru = "katsuragi_misato"
+anilist = 1259
+
+[[character]]
+id = "eva-01"
+native = ["エヴァンゲリオン初号機"]
+danbooru = "eva_01"
+sites = { konachan = "eva-01" }
+
+[[character]]
+id = "magi"

@@ -1,0 +1,34 @@
+name = "SOUND VOLTEX"
+danbooru = "sound_voltex"
+
+[[character]]
+id = "grace"
+native = ["グレイス"]
+danbooru = "grace_(sound_voltex)"
+
+[[character]]
+id = "konoha"
+native = ["恋刃", "コノハ"]
+danbooru = "konoha_(sound_voltex)"
+sites = { konachan = "konoha" }
+
+[[character]]
+id = "kureha"
+native = ["紅刃", "クレハ"]
+danbooru = "kureha_(sound_voltex)"
+
+[[character]]
+id = "near"
+native = ["ニア", "ニア&ノア"]
+danbooru = "near_(sound_voltex)"
+
+[[character]]
+id = "noah"
+native = ["ノア", "ニア&ノア"]
+danbooru = "noah_(sound_voltex)"
+
+[[character]]
+id = "rasis"
+native = ["レイシス"]
+danbooru = "rasis"
+sites = { zerochan = "rasis_(sound_voltex)" }

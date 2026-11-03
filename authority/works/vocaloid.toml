@@ -1,0 +1,42 @@
+name = "Vocaloid"
+native = "ボーカロイド"
+danbooru = "vocaloid"
+lead = "vocaloid/hatsune-miku"
+
+[art]
+steam = "1761390"
+
+[[character]]
+id = "hatsune-miku"
+native = ["初音ミク"]
+danbooru = "hatsune_miku"
+
+[[character]]
+id = "kumori"
+
+[[character]]
+id = "kagamine-rin"
+native = ["鏡音リン"]
+danbooru = "kagamine_rin"
+
+[[character]]
+id = "kagamine-len"
+native = ["鏡音レン"]
+danbooru = "kagamine_len"
+
+[[character]]
+id = "megurine-luka"
+native = ["巡音ルカ"]
+danbooru = "megurine_luka"
+
+[[character]]
+id = "kaito"
+native = ["カイト", "KAITO"]
+danbooru = "kaito_(vocaloid)"
+sites = { konachan = "kaito", yande = "kaito" }
+
+[[character]]
+id = "meiko"
+native = ["メイコ", "MEIKO"]
+danbooru = "meiko_(vocaloid)"
+sites = { konachan = "meiko", yande = "meiko" }

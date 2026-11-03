@@ -1,0 +1,38 @@
+name = "K-On!"
+native = "けいおん!"
+danbooru = "k-on!"
+lead = "k-on/hirasawa-yui"
+
+[art]
+tmdb = "tv/42253"
+anilist = 5680
+
+[[character]]
+id = "hirasawa-yui"
+native = ["平沢唯"]
+danbooru = "hirasawa_yui"
+anilist = 19565
+
+[[character]]
+id = "tainaka-ritsu"
+native = ["田井中律"]
+danbooru = "tainaka_ritsu"
+anilist = 19567
+
+[[character]]
+id = "akiyama-mio"
+native = ["秋山澪"]
+danbooru = "akiyama_mio"
+anilist = 19566
+
+[[character]]
+id = "kotobuki-tsumugi"
+native = ["琴吹紬"]
+danbooru = "kotobuki_tsumugi"
+anilist = 19568
+
+[[character]]
+id = "nakano-azusa"
+native = ["中野梓"]
+danbooru = "nakano_azusa"
+anilist = 21173

@@ -1,0 +1,29 @@
+name: Add a character
+description: Ask for a character the index does not hold or does not place in its work
+labels: [character]
+body:
+  - type: input
+    id: character
+    attributes:
+      label: Character and work
+      description: For example Aria, Lumen Song.
+    validations:
+      required: true
+  - type: input
+    id: names
+    attributes:
+      label: Other names
+      description: The name in the work's original language and any other it goes by.
+  - type: input
+    id: tag
+    attributes:
+      label: Danbooru tag
+      description: The character's tag, if it has one.
+  - type: textarea
+    id: where
+    attributes:
+      label: Where the work is listed
+      description: A link to the work or the character on Bangumi, Wikidata, AniList, TMDB or Steam, if you know one.
+  - type: markdown
+    attributes:
+      value: Requests are read and talked over before anything is added, so an answer may take a while.

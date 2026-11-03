@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { gzipSync } from 'node:zlib'
+import { writeAuthority } from './authority.ts'
 import {
   ADULT,
   CHARACTER,
@@ -507,6 +508,7 @@ export async function chunk(dir: string, target = 32_768): Promise<void> {
   }
   const manifest = JSON.stringify({ aninames: FORMAT, built, layers })
   writeFileSync(join(out, 'manifest.json'), manifest)
+  writeAuthority(join(out, 'authority.json'))
   writeFileSync(join(out, 'CNAME'), `${DOMAIN}\n`)
   writeFileSync(join(out, 'NOTICE.md'), await notice())
   writeFileSync(join(out, 'index.html'), await page(built))

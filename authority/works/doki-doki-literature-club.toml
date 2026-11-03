@@ -1,0 +1,31 @@
+name = "Doki Doki Literature Club"
+native = "ドキドキ文芸部!"
+danbooru = "doki_doki_literature_club"
+lead = "doki-doki-literature-club/monika"
+
+[[character]]
+id = "sayori"
+native = ["サヨリ"]
+danbooru = "sayori_(doki_doki_literature_club)"
+sites = { konachan = "sayori_(ddlc)", yande = "sayori_(doki_doki_literature_club!)", zerochan = "sayori_(doki_doki_literature_club!)" }
+
+[[character]]
+id = "natsuki"
+native = ["ナツキ"]
+danbooru = "natsuki_(doki_doki_literature_club)"
+sites = { konachan = "natsuki_(ddlc)", yande = "natsuki_(doki_doki_literature_club!)", zerochan = "natsuki_(doki_doki_literature_club!)" }
+
+[[character]]
+id = "yuri"
+native = ["ユリ"]
+danbooru = "yuri_(doki_doki_literature_club)"
+sites = { konachan = "yuri_(ddlc)", yande = "yuri_(doki_doki_literature_club!)", zerochan = "yuri_(doki_doki_literature_club!)" }
+
+[[character]]
+id = "monika"
+native = ["モニカ"]
+danbooru = "monika_(doki_doki_literature_club)"
+sites = { konachan = "monika_(ddlc)", yande = "monika_(doki_doki_literature_club!)", zerochan = "monika_(doki_doki_literature_club!)" }
+
+[[character]]
+id = "glitch"

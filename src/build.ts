@@ -26,6 +26,7 @@ import {
   type Source,
   SPINE,
 } from './model.ts'
+import { AUTHORITY } from './sources/authority.ts'
 import { load, NAMES } from './sources/index.ts'
 import { BANGUMI, link, MEDIUM_ORDER, type Medium, mediaOf } from './spine.ts'
 import { readStage, stagePath } from './stage.ts'
@@ -131,6 +132,12 @@ function resolveEntities(
 
 const own = (s: Staged) => s.source === BANGUMI
 
+const DANBOORU = 'danbooru'
+
+const TMDB = 'tmdb:'
+
+const LINK_YEARS = 2
+
 function parentsOf(union: Union, entities: Map<string, Entity>): Map<string, Set<string>> {
   const parents = new Map<string, Set<string>>()
   for (const [root, entity] of entities) {
@@ -157,6 +164,20 @@ function attachEntries(
   graph: WorkGraph,
 ): { attached: number; missed: number; spread: Map<string, Set<string>> } {
   const workNames = namesOfWorks(union, staged)
+  const latinWorks = new Map<string, Set<string>>()
+  for (const [root, entity] of entities) {
+    if (entity.kind !== 'work') continue
+    for (const m of entity.members.filter(own)) {
+      for (const { text } of m.entry.names) {
+        if (japanese(text)) continue
+        const key = titleKey(text)
+        if (!key) continue
+        const set = latinWorks.get(key) ?? new Set<string>()
+        set.add(root)
+        latinWorks.set(key, set)
+      }
+    }
+  }
   const characterNames = new Map<string, Set<string>>()
   const characterWorks = new Map<string, Set<string>>()
   const neighbours = graph.links
@@ -213,11 +234,38 @@ function attachEntries(
     return inCast.length === 1 ? entities.get(inCast[0] ?? '') : undefined
   }
   const spread = new Map<string, Set<string>>()
+  const drawn = new Map(staged.flatMap((s) => (s.source === DANBOORU ? [[s.entry.id, s] as const] : [])))
+  const heldBy = (kind: Kind, tag: string): Entity | undefined => {
+    if (kind === 'character') {
+      const key = node(kind, tag)
+      return union.has(key) ? entities.get(union.find(key)) : undefined
+    }
+    const family = graph.families.get(tag)
+    const root = family?.head ?? family?.works[0]
+    return root ? entities.get(root) : entities.get(node(kind, tag))
+  }
   let attached = 0
   let missed = 0
   for (const s of staged) {
     const { entry } = s
     if (!entry.attach || entry.nature) continue
+    if (s.source === AUTHORITY && entry.kind) {
+      const { kind } = entry
+      const [tag] = entry.refs ?? []
+      const held = tag ? heldBy(kind, tag) : undefined
+      if (held) held.members.push(s)
+      else {
+        const named = tag ? (drawn.get(tag) ?? { ...s, entry: { id: tag, kind, attach: true, names: [] } }) : undefined
+        entities.set(node(kind, entry.id), {
+          id: `${kind === 'work' ? 'w' : 'c'}/${entry.id}`,
+          kind,
+          layer: SPINE,
+          members: named ? [s, named] : [s],
+        })
+      }
+      attached++
+      continue
+    }
     if (entry.kind === 'character' && entry.link?.length) {
       const found = castOf(entry)
       if (found) {
@@ -267,11 +315,20 @@ function attachEntries(
     const targets: Entity[] = target ? [target] : []
     if (!target && entry.link?.length && kinds.includes('work')) {
       const roots = new Set<string>()
-      for (const text of entry.link) for (const root of workNames.get(titleName(text)) ?? []) roots.add(root)
-      const media = new Set<Medium | null>(mediaOf(s))
+      const near = (root: string) => {
+        const year = graph.years.get(root)
+        return entry.year === undefined || (year !== undefined && Math.abs(year - entry.year) <= LINK_YEARS)
+      }
+      for (const text of entry.link) {
+        for (const root of workNames.get(titleName(text)) ?? []) roots.add(root)
+        if (!japanese(text)) for (const root of latinWorks.get(titleKey(text)) ?? []) if (near(root)) roots.add(root)
+      }
+      const media = new Set<Medium | null>(entry.id.startsWith(TMDB) ? ['anime'] : mediaOf(s))
+      const fits = (medium: Medium | null) =>
+        media.size === 0 || media.has(medium) || (medium === 'vn' && media.has('game'))
       const fitting = [...roots].flatMap((root) => {
         const found = entities.get(root)
-        return found && (media.size === 0 || media.has(mediumOf(found))) ? [found] : []
+        return found && fits(mediumOf(found)) ? [found] : []
       })
       if (fitting.length === 1) targets.push(fitting[0] as Entity)
     }
@@ -811,6 +868,10 @@ export async function build(): Promise<void> {
   const families = new Map<string, number | null>()
   for (const s of staged) if (s.entry.family) families.set(s.entry.id.slice(TAG.length), s.entry.rank ?? null)
   const homes = homesOf(union, entities, parents, links, families, spread, copyrights)
+  for (const entity of entities.values()) {
+    const home = entity.members.find((m) => m.source === AUTHORITY)?.entry.home
+    if (home && !homes.has(entity.id)) homes.set(entity.id, { tag: home, posts: null, tier: 0, also: [] })
+  }
   console.log(`build: ${homes.size} characters have a home tag`)
   const keys = familyKeysOf(keyedWorks(union, entities, graph), links)
   const familyHomes = homesInFamilies(union, entities, keys, homes)

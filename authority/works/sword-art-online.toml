@@ -1,0 +1,51 @@
+name = "Sword Art Online"
+native = "ソードアート・オンライン"
+danbooru = "sword_art_online"
+lead = "sword-art-online/sinon"
+
+[art]
+tmdb = "tv/45782"
+anilist = 11757
+
+[[character]]
+id = "kirito"
+native = ["キリト", "桐ヶ谷和人"]
+danbooru = "kirito"
+sites = { konachan = "kirigaya_kazuto", zerochan = "kirigaya_kazuto" }
+anilist = 36765
+
+[[character]]
+id = "asuna"
+native = ["アスナ", "結城明日奈"]
+danbooru = "asuna_(sao)"
+sites = { konachan = "yuuki_asuna", yande = "asuna_(sword_art_online)", zerochan = "yuuki_asuna" }
+anilist = 36828
+
+[[character]]
+id = "sinon"
+native = ["シノン", "朝田詩乃"]
+danbooru = "sinon"
+sites = { konachan = "shinon_(sao)", zerochan = "sinon_(ggo)" }
+anilist = 55147
+person = "Sinon"
+
+[[character]]
+id = "leafa"
+native = ["リーファ", "桐ヶ谷直葉"]
+danbooru = "leafa_(sao)"
+sites = { konachan = "leafa", yande = "leafa", zerochan = "lyfa_(alo)" }
+anilist = 36831
+
+[[character]]
+id = "alice-zuberg"
+native = ["アリス・ツーベルク", "アリス・シンセシス・サーティ"]
+danbooru = "alice_zuberg"
+sites = { zerochan = "alice_schuberg" }
+anilist = 75450
+
+[[character]]
+id = "yuuki"
+native = ["ユウキ", "紺野木綿季"]
+danbooru = "yuuki_(sao)"
+sites = { konachan = "konno_yuuki", yande = "konno_yuuki", zerochan = "konno_yuuki" }
+anilist = 64523

@@ -1,0 +1,38 @@
+name = "Undertale"
+native = "アンダーテイル"
+danbooru = "undertale"
+lead = "undertale/determination"
+
+[[character]]
+id = "toriel"
+native = ["トリエル"]
+danbooru = "toriel"
+sites = { konachan = "toriel_(undertale)" }
+
+[[character]]
+id = "sans"
+native = ["サンズ"]
+danbooru = "sans_(undertale)"
+sites = { konachan = "sans", yande = "sans", zerochan = "sans" }
+
+[[character]]
+id = "papyrus"
+native = ["パピルス"]
+danbooru = "papyrus_(undertale)"
+sites = { yande = "papyrus", zerochan = "papyrus" }
+
+[[character]]
+id = "undyne"
+native = ["アンダイン"]
+danbooru = "undyne"
+sites = { konachan = [] }
+
+[[character]]
+id = "mettaton"
+native = ["メタトン"]
+danbooru = "mettaton"
+sites = { yande = [], zerochan = "mettaton_ex" }
+
+[[character]]
+id = "determination"
+native = ["ケツイ"]

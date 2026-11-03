@@ -1,0 +1,44 @@
+name = "pop'n music"
+danbooru = "pop'n_music"
+
+[[character]]
+id = "milk"
+native = ["ミルク"]
+danbooru = "milk_(pop'n_music)"
+sites = { konachan = [] }
+
+[[character]]
+id = "mimi"
+native = ["ミミ", "ミミニャミ"]
+danbooru = "mimi_(pop'n_music)"
+sites = { yande = [] }
+
+[[character]]
+id = "nyami"
+native = ["ニャミ", "ミミニャミ"]
+danbooru = "nyami_(pop'n_music)"
+sites = { yande = [], zerochan = "nyami" }
+
+[[character]]
+id = "poet"
+native = ["ポエット"]
+danbooru = "poet_(pop'n_music)"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "rie-chan"
+native = ["リエちゃん", "リエ♥ちゃん"]
+danbooru = "rie-chan"
+sites = { konachan = [], yande = [] }
+
+[[character]]
+id = "sanae-chan"
+native = ["さなえちゃん", "さなえ♥ちゃん"]
+danbooru = "sanae-chan"
+sites = { konachan = [], yande = [] }
+
+[[character]]
+id = "yuli"
+native = ["ユーリ"]
+danbooru = "yuli_(pop'n_music)"
+sites = { konachan = [] }

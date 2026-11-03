@@ -1,0 +1,51 @@
+name = "The Devil Is a Part-Timer!"
+native = "はたらく魔王さま!"
+danbooru = "hataraku_maou-sama!"
+lead = "the-devil-is-a-part-timer/urushihara-hanzou"
+
+[art]
+tmdb = "tv/45997"
+anilist = 15809
+
+[[character]]
+id = "maou-sadao"
+native = ["真奥貞夫"]
+danbooru = "maou_sadao"
+anilist = 70733
+person = "Sadao Maou"
+
+[[character]]
+id = "yusa-emi"
+native = ["遊佐恵美"]
+danbooru = "yusa_emi"
+anilist = 70735
+person = "Emi Yusa"
+
+[[character]]
+id = "sasaki-chiho"
+native = ["佐々木千穂"]
+danbooru = "sasaki_chiho"
+anilist = 70739
+person = "Chiho Sasaki"
+
+[[character]]
+id = "ashiya-shirou"
+native = ["芦屋四郎"]
+danbooru = "ashiya_shirou"
+anilist = 70737
+person = "Shiro Ashiya"
+
+[[character]]
+id = "urushihara-hanzou"
+native = ["漆原半蔵"]
+danbooru = "urushihara_hanzou"
+sites = { konachan = ["hanzou_urushihara", "urushihara_hanzo"], zerochan = "urushihara_hanzo" }
+anilist = 83103
+person = "Hanzo Urushihara"
+
+[[character]]
+id = "kamazuki-suzuno"
+native = ["鎌月鈴乃"]
+danbooru = "kamazuki_suzuno"
+anilist = 83105
+person = "Suzuno Kamazuki"

@@ -1,0 +1,32 @@
+name = "Lucky☆Star"
+native = "らき☆すた"
+danbooru = "lucky_star"
+lead = "lucky-star/izumi-konata"
+
+[art]
+tmdb = "tv/42500"
+anilist = 1887
+
+[[character]]
+id = "izumi-konata"
+native = ["泉こなた"]
+danbooru = "izumi_konata"
+anilist = 2169
+
+[[character]]
+id = "hiiragi-kagami"
+native = ["柊かがみ"]
+danbooru = "hiiragi_kagami"
+anilist = 2171
+
+[[character]]
+id = "hiiragi-tsukasa"
+native = ["柊つかさ"]
+danbooru = "hiiragi_tsukasa"
+anilist = 2170
+
+[[character]]
+id = "takara-miyuki"
+native = ["高良みゆき"]
+danbooru = "takara_miyuki"
+anilist = 2172

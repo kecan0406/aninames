@@ -1,0 +1,45 @@
+name = "Black Bullet"
+native = "ブラック・ブレット"
+danbooru = "black_bullet"
+lead = "black-bullet/aihara-enju"
+
+[art]
+tmdb = "tv/60834"
+anilist = 20457
+
+[[character]]
+id = "satomi-rentarou"
+native = ["里見蓮太郎"]
+danbooru = "satomi_rentarou"
+anilist = 74619
+
+[[character]]
+id = "aihara-enju"
+native = ["藍原延珠"]
+danbooru = "aihara_enju"
+anilist = 74621
+person = "Enju Aihara"
+
+[[character]]
+id = "tendou-kisara"
+native = ["天童木更"]
+danbooru = "tendou_kisara"
+anilist = 83523
+
+[[character]]
+id = "tina-sprout"
+native = ["ティナ・スプラウト"]
+danbooru = "tina_sprout"
+anilist = 88336
+
+[[character]]
+id = "hiruko-kohina"
+native = ["蛭子小比奈"]
+danbooru = "hiruko_kohina"
+anilist = 88339
+
+[[character]]
+id = "hiruko-kagetane"
+native = ["蛭子影胤"]
+danbooru = "hiruko_kagetane"
+anilist = 83505

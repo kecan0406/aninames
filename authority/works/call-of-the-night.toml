@@ -1,0 +1,41 @@
+name = "Call of the Night"
+native = "よふかしのうた"
+danbooru = "yofukashi_no_uta"
+lead = "call-of-the-night/nanakusa-nazuna"
+
+[art]
+tmdb = "tv/138357"
+anilist = 141391
+
+[[character]]
+id = "nanakusa-nazuna"
+native = ["七草ナズナ"]
+danbooru = "nanakusa_nazuna_(yofukashi_no_uta)"
+sites = { konachan = "nanakusa_nazuna", yande = "nanakusa_nazuna", zerochan = "nanakusa_nazuna" }
+anilist = 168774
+
+[[character]]
+id = "yamori-kou"
+native = ["夜守コウ"]
+danbooru = "yamori_kou"
+sites = { konachan = [] }
+anilist = 168866
+
+[[character]]
+id = "kikyou-seri"
+native = ["桔梗セリ"]
+danbooru = "kikyou_seri"
+sites = { konachan = [], zerochan = "kikiyou_seri" }
+anilist = 175658
+person = "Seri Kikyo"
+
+[[character]]
+id = "uguisu-anko"
+native = ["鶯アンコ"]
+danbooru = "uguisu_anko"
+sites = { konachan = [] }
+anilist = 175659
+person = "Anko Uguisu"
+
+[[character]]
+id = "yofukashi"

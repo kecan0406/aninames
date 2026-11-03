@@ -1,6 +1,17 @@
 import type { Source } from '../model.ts'
 
-export const NAMES = ['aod', 'wikidata', 'vndb', 'kowiki', 'anidb', 'bangumi', 'anissia', 'danbooru'] as const
+export const NAMES = [
+  'aod',
+  'wikidata',
+  'vndb',
+  'kowiki',
+  'anidb',
+  'bangumi',
+  'anissia',
+  'danbooru',
+  'fribb',
+  'authority',
+] as const
 
 export async function load(name: string): Promise<Source> {
   if (!(NAMES as readonly string[]).includes(name)) {

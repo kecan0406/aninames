@@ -1,0 +1,37 @@
+name = "Umineko"
+native = "うみねこのなく頃に"
+danbooru = "umineko_no_naku_koro_ni"
+lead = "umineko/beatrice"
+
+[art]
+tmdb = "tv/25499"
+anilist = 4896
+
+[[character]]
+id = "ushiromiya-battler"
+native = ["右代宮戦人"]
+danbooru = "ushiromiya_battler"
+anilist = 14040
+
+[[character]]
+id = "beatrice"
+native = ["ベアトリーチェ"]
+danbooru = "beatrice_(umineko)"
+sites = { konachan = "beatrice", yande = "beatrice", zerochan = "beatrice_(umineko_no_naku_koro_ni)" }
+anilist = 10285
+
+[[character]]
+id = "frederica-bernkastel"
+native = ["フレデリカ・ベルンカステル"]
+danbooru = "frederica_bernkastel"
+anilist = 11840
+
+[[character]]
+id = "lambdadelta"
+native = ["ラムダデルタ"]
+danbooru = "lambdadelta"
+anilist = 10196
+
+[[character]]
+id = "rokkenjima"
+native = ["六軒島"]

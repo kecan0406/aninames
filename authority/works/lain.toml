@@ -1,0 +1,14 @@
+name = "Lain"
+native = "serial experiments lain"
+danbooru = "serial_experiments_lain"
+lead = "lain/iwakura-lain"
+
+[art]
+tmdb = "tv/1087"
+anilist = 339
+
+[[character]]
+id = "iwakura-lain"
+native = ["岩倉玲音"]
+danbooru = "iwakura_lain"
+anilist = 2219

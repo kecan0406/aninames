@@ -1,0 +1,26 @@
+name: Add a picture
+description: Ask for a picture of a work or a character that has none, or a better one
+labels: [picture]
+body:
+  - type: input
+    id: subject
+    attributes:
+      label: Work or character
+      description: For example Aria, Lumen Song.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Where the picture is
+      description: A link to the page that holds it, on the site that made it public. Please upload nothing here.
+    validations:
+      required: true
+  - type: input
+    id: credit
+    attributes:
+      label: Who made it
+      description: The publisher or the artist, if you know.
+  - type: markdown
+    attributes:
+      value: Requests are read and talked over before anything is added, so an answer may take a while.

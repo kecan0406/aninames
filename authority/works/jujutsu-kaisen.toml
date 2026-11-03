@@ -1,0 +1,54 @@
+name = "Jujutsu Kaisen"
+native = "呪術廻戦"
+danbooru = "jujutsu_kaisen"
+lead = "jujutsu-kaisen/gojo-satoru"
+
+[art]
+tmdb = "tv/95479"
+anilist = 113415
+
+[[character]]
+id = "gojo-satoru"
+native = ["五条悟"]
+danbooru = "gojo_satoru"
+sites = { konachan = "gojou_satoru", yande = "gojou_satoru", zerochan = "gojou_satoru" }
+anilist = 127691
+
+[[character]]
+id = "itadori-yuji"
+native = ["虎杖悠仁"]
+danbooru = "itadori_yuji"
+sites = { konachan = "itadori_yuuji", yande = "itadori_yuuji", zerochan = "itadori_yuuji" }
+anilist = 127212
+
+[[character]]
+id = "fushiguro-megumi"
+native = ["伏黒恵"]
+danbooru = "fushiguro_megumi"
+anilist = 126635
+
+[[character]]
+id = "kugisaki-nobara"
+native = ["釘崎野薔薇"]
+danbooru = "kugisaki_nobara"
+anilist = 133700
+
+[[character]]
+id = "nanami-kento"
+native = ["七海建人"]
+danbooru = "nanami_kento"
+anilist = 133704
+
+[[character]]
+id = "geto-suguru"
+native = ["夏油傑"]
+danbooru = "geto_suguru"
+sites = { konachan = [], yande = "getou_suguru", zerochan = "getou_suguru" }
+anilist = 133699
+
+[[character]]
+id = "ryoumen-sukuna"
+native = ["両面宿儺"]
+danbooru = "ryoumen_sukuna_(jujutsu_kaisen)"
+sites = { konachan = [], yande = [], zerochan = "sukuna" }
+anilist = 133701

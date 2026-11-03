@@ -1,0 +1,44 @@
+name = "Oregairu"
+native = "やはり俺の青春ラブコメはまちがっている。"
+danbooru = "yahari_ore_no_seishun_lovecome_wa_machigatteiru."
+lead = "oregairu/isshiki-iroha"
+
+[art]
+tmdb = "tv/65676"
+anilist = 14813
+
+[[character]]
+id = "hikigaya-hachiman"
+native = ["比企谷八幡"]
+danbooru = "hikigaya_hachiman"
+anilist = 67065
+
+[[character]]
+id = "yukinoshita-yukino"
+native = ["雪ノ下雪乃"]
+danbooru = "yukinoshita_yukino"
+anilist = 67067
+
+[[character]]
+id = "yuigahama-yui"
+native = ["由比ヶ浜結衣"]
+danbooru = "yuigahama_yui"
+anilist = 67069
+
+[[character]]
+id = "isshiki-iroha"
+native = ["一色いろは"]
+danbooru = "isshiki_iroha"
+anilist = 88727
+
+[[character]]
+id = "hikigaya-komachi"
+native = ["比企谷小町"]
+danbooru = "hikigaya_komachi"
+anilist = 67075
+
+[[character]]
+id = "yukinoshita-haruno"
+native = ["雪ノ下陽乃"]
+danbooru = "yukinoshita_haruno"
+anilist = 79589

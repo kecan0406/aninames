@@ -12,9 +12,9 @@ Sources under different share-alike licenses cannot be merged into one database,
 |---|---|---|---|
 | `core` | `core.sqlite` | ODbL 1.0 (contents DbCL) | Wikidata (CC0), anime-offline-database (ODbL), VNDB (ODbL) |
 | `kowiki` | `kowiki.sqlite` | CC BY-SA 4.0 | Korean Wikipedia article titles and redirects |
-| `unlicensed` | `unlicensed.sqlite` | none stated by the sources | Bangumi Archive (the spine), AniDB titles (Anime-Lists mirror), Anissia, Danbooru |
+| `unlicensed` | `unlicensed.sqlite` | none stated by the sources | Bangumi Archive (the spine), AniDB titles (Anime-Lists mirror), Anissia, Danbooru, Fribb's anime-lists, the authority |
 
-The `unlicensed` layer carries data whose sources state no license; redistributing it is at your own risk. A work or character only another source knows (a Danbooru tag, a VNDB character, an anime-offline-database special) is not in the index.
+The `unlicensed` layer carries data whose sources state no license; redistributing it is at your own risk. A work or character only another source knows (a Danbooru tag, a VNDB character, an anime-offline-database special) is not in the index, unless a person added it to [the authority](authority/README.md): the works and characters people have asked for through an issue and agreed on, whichever source knows them.
 
 Korean names generated from kana readings (national-standard and fan spellings) are marked `generated` and rank below sourced names.
 
@@ -56,6 +56,7 @@ Built: 122,012 works and 213,713 characters, all Bangumi's. Two builds from the 
 
 | Path | Holds |
 |---|---|
+| `authority.json` | the works and characters of [the authority](authority/README.md), with where their pictures are |
 | `manifest.json` | the format number, the build time and, for every layer and table, each file's lower bound (prefix-compressed against the one before) and name |
 | `<layer>/<table>/<hash>.json.gz` | about 32 KB of JSON rows sorted by key (16 KB for `entity`), named by the first 48 bits of the SHA-256 of the file |
 | `NOTICE.md`, `index.html` | each layer's sources and terms |

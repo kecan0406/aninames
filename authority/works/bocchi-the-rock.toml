@@ -1,0 +1,34 @@
+name = "Bocchi the Rock!"
+native = "ぼっち・ざ・ろっく!"
+danbooru = "bocchi_the_rock!"
+lead = "bocchi-the-rock/gotoh-hitori"
+
+[art]
+tmdb = "tv/119100"
+anilist = 130003
+
+[[character]]
+id = "gotoh-hitori"
+native = ["後藤ひとり"]
+danbooru = "gotoh_hitori"
+sites = { konachan = "gotou_hitori", yande = "gotou_hitori", zerochan = "gotou_hitori" }
+anilist = 257562
+
+[[character]]
+id = "ijichi-nijika"
+native = ["伊地知虹夏"]
+danbooru = "ijichi_nijika"
+anilist = 261674
+
+[[character]]
+id = "yamada-ryo"
+native = ["山田リョウ"]
+danbooru = "yamada_ryo"
+sites = { konachan = "yamada_ryou", yande = "yamada_ryou", zerochan = "yamada_ryou" }
+anilist = 264529
+
+[[character]]
+id = "kita-ikuyo"
+native = ["喜多郁代"]
+danbooru = "kita_ikuyo"
+anilist = 266041

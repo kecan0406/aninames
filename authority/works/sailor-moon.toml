@@ -1,0 +1,39 @@
+name = "Sailor Moon"
+native = "美少女戦士セーラームーン"
+danbooru = "bishoujo_senshi_sailor_moon"
+lead = "sailor-moon/sailor-moon"
+
+[art]
+tmdb = "tv/3570"
+anilist = 530
+
+[[character]]
+id = "sailor-moon"
+native = ["セーラームーン", "月野うさぎ"]
+danbooru = "sailor_moon"
+sites = { konachan = ["tsukino_usagi", "sailor_moon_(character)"], yande = "tsukino_usagi", zerochan = "sailor_moon_(character)" }
+anilist = 2030
+
+[[character]]
+id = "sailor-mercury"
+native = ["セーラーマーキュリー", "水野亜美"]
+danbooru = "sailor_mercury"
+anilist = 2366
+
+[[character]]
+id = "sailor-mars"
+native = ["セーラーマーズ", "火野レイ"]
+danbooru = "sailor_mars"
+anilist = 2367
+
+[[character]]
+id = "sailor-jupiter"
+native = ["セーラージュピター", "木野まこと"]
+danbooru = "sailor_jupiter"
+anilist = 2825
+
+[[character]]
+id = "sailor-venus"
+native = ["セーラーヴィーナス", "愛野美奈子"]
+danbooru = "sailor_venus"
+anilist = 2826

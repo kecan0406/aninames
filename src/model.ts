@@ -30,6 +30,7 @@ export type Namespace =
   | 'danbooru'
   | 'kowiki'
   | 'anissia'
+  | 'authority'
 
 export type Ref = `${Namespace}:${string}`
 
@@ -69,6 +70,7 @@ export interface Entry {
   origin?: string[]
   genres?: GameGenre[]
   nature?: Nature
+  home?: string
 }
 
 export interface Source {

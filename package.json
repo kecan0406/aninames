@@ -1,6 +1,6 @@
 {
   "name": "@kecan0406/aninames",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "type": "module",
   "description": "Multilingual alias index for anime titles and characters",
   "license": "MIT",
@@ -13,7 +13,12 @@
     ".": {
       "types": "./lib/client/index.d.ts",
       "default": "./lib/client/index.js"
-    }
+    },
+    "./pictures": {
+      "types": "./lib/client/pictures.d.ts",
+      "default": "./lib/client/pictures.js"
+    },
+    "./authority.json": "./lib/authority.json"
   },
   "files": [
     "lib"

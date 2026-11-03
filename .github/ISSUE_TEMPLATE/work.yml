@@ -1,0 +1,29 @@
+name: Add a work
+description: Ask for a work the index does not hold
+labels: [work]
+body:
+  - type: input
+    id: work
+    attributes:
+      label: Work
+      description: Its name as lists should show it.
+    validations:
+      required: true
+  - type: input
+    id: native
+    attributes:
+      label: Original title
+      description: Its title in its original language.
+  - type: input
+    id: tag
+    attributes:
+      label: Danbooru tag
+      description: The work's copyright tag, if it has one.
+  - type: textarea
+    id: where
+    attributes:
+      label: Where the work is listed
+      description: A link to it on Bangumi, Wikidata, AniList, TMDB or Steam, if you know one.
+  - type: markdown
+    attributes:
+      value: Requests are read and talked over before anything is added, so an answer may take a while.

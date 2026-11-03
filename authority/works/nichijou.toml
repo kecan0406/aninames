@@ -1,0 +1,52 @@
+name = "Nichijou"
+native = "日常"
+danbooru = "nichijou"
+lead = "nichijou/sakamoto"
+
+[art]
+tmdb = "tv/44684"
+anilist = 10165
+
+[[character]]
+id = "aioi-yuuko"
+native = ["相生祐子"]
+danbooru = "aioi_yuuko"
+sites = { yande = "aioi_yuko" }
+anilist = 10418
+person = "Yuko Aioi"
+
+[[character]]
+id = "naganohara-mio"
+native = ["長野原みお"]
+danbooru = "naganohara_mio"
+anilist = 40081
+person = "Mio Naganohara"
+
+[[character]]
+id = "minakami-mai"
+native = ["水上麻衣"]
+danbooru = "minakami_mai"
+anilist = 10421
+person = "Mai Minakami"
+
+[[character]]
+id = "shinonome-nano"
+native = ["東雲なの"]
+danbooru = "shinonome_nano"
+anilist = 10422
+person = "Nano Shinonome"
+
+[[character]]
+id = "professor-shinonome"
+native = ["東雲はかせ"]
+danbooru = "professor_shinonome"
+sites = { konachan = "hakase_(nichijou)", yande = "hakase", zerochan = "shinonome_hakase" }
+anilist = 41055
+
+[[character]]
+id = "sakamoto"
+native = ["阪本"]
+danbooru = "sakamoto_(nichijou)"
+sites = { yande = "sakamoto" }
+anilist = 41069
+person = "Sakamoto"

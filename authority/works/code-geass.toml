@@ -1,0 +1,48 @@
+name = "Code Geass"
+native = "コードギアス 反逆のルルーシュ"
+danbooru = "code_geass"
+lead = "code-geass/lelouch-vi-britannia"
+
+[art]
+tmdb = "tv/31724"
+anilist = 1575
+
+[[character]]
+id = "lelouch-vi-britannia"
+native = ["ルルーシュ・ランペルージ"]
+danbooru = "lelouch_vi_britannia"
+sites = { konachan = "lelouch_lamperouge", yande = "lelouch_lamperouge", zerochan = "lelouch_lamperouge" }
+anilist = 417
+
+[[character]]
+id = "kururugi-suzaku"
+native = ["枢木スザク"]
+danbooru = "kururugi_suzaku"
+anilist = 559
+
+[[character]]
+id = "c-c"
+native = ["シーツー", "C.C."]
+danbooru = "c.c."
+anilist = 1111
+
+[[character]]
+id = "kouzuki-kallen"
+native = ["カレン・シュタットフェルト", "紅月カレン"]
+danbooru = "kouzuki_kallen"
+sites = { konachan = "kallen_stadtfeld", yande = "kallen_stadtfeld", zerochan = "kallen_stadtfeld" }
+anilist = 558
+person = "Kallen Kozuki"
+
+[[character]]
+id = "nunnally-vi-britannia"
+native = ["ナナリー・ランペルージ"]
+danbooru = "nunnally_vi_britannia"
+sites = { konachan = "nunnally_lamperouge", yande = "nunnally_lamperouge", zerochan = "nunnally_lamperouge" }
+anilist = 1110
+
+[[character]]
+id = "euphemia-li-britannia"
+native = ["ユーフェミア・リ・ブリタニア"]
+danbooru = "euphemia_li_britannia"
+anilist = 1114

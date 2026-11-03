@@ -7,5 +7,5 @@
     "rootDir": "src",
     "outDir": "lib"
   },
-  "include": ["src/client/index.ts"]
+  "include": ["src/client/index.ts", "src/client/pictures.ts"]
 }

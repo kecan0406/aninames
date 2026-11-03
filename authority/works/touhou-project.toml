@@ -1,0 +1,37 @@
+name = "Touhou Project"
+native = "東方Project"
+danbooru = "touhou"
+lead = "touhou-project/hakurei-reimu"
+
+[art]
+steam = "3671710"
+
+[[character]]
+id = "hakurei-reimu"
+native = ["博麗霊夢"]
+danbooru = "hakurei_reimu"
+
+[[character]]
+id = "kirisame-marisa"
+native = ["霧雨魔理沙"]
+danbooru = "kirisame_marisa"
+
+[[character]]
+id = "cirno"
+native = ["チルノ"]
+danbooru = "cirno"
+
+[[character]]
+id = "konpaku-youmu"
+native = ["魂魄妖夢"]
+danbooru = "konpaku_youmu"
+
+[[character]]
+id = "patchouli-knowledge"
+native = ["パチュリー・ノーレッジ"]
+danbooru = "patchouli_knowledge"
+
+[[character]]
+id = "flandre-scarlet"
+native = ["フランドール・スカーレット"]
+danbooru = "flandre_scarlet"

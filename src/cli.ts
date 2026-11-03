@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises'
 import { audit, checkLive } from './audit.ts'
+import { writeAuthority } from './authority.ts'
 import { build, DIST } from './build.ts'
 import { compare } from './compare.ts'
 import { evaluate } from './eval.ts'
@@ -39,6 +40,9 @@ async function main(argv: string[]): Promise<void> {
       return
     case 'chunk':
       await chunk(DIST, Number(rest[0] ?? 32_768))
+      return
+    case 'authority':
+      console.log(`authority: ${writeAuthority(rest[0] ?? 'authority.json')} works`)
       return
     case 'audit': {
       process.exitCode = (await audit(DIST, rest[0], rest.slice(1))) > 0 ? 1 : 0
@@ -83,7 +87,7 @@ async function main(argv: string[]): Promise<void> {
     }
     default:
       throw new Error(
-        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, pack, chunk, audit, contract, search, eval, probe, compare, silver or han`,
+        `aninames: unknown verb ${verb ?? '(none)'}; use fetch, stage, build, pack, chunk, authority, audit, contract, search, eval, probe, compare, silver or han`,
       )
   }
 }

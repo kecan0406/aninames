@@ -1,0 +1,47 @@
+name = "No Game No Life"
+native = "ノーゲーム・ノーライフ"
+danbooru = "no_game_no_life"
+lead = "no-game-no-life/jibril"
+
+[art]
+tmdb = "tv/60808"
+anilist = 19815
+
+[[character]]
+id = "sora"
+native = ["空"]
+danbooru = "sora_(no_game_no_life)"
+anilist = 82523
+
+[[character]]
+id = "shiro"
+native = ["白"]
+danbooru = "shiro_(no_game_no_life)"
+anilist = 82525
+
+[[character]]
+id = "stephanie-dora"
+native = ["ステファニー・ドーラ"]
+danbooru = "stephanie_dora"
+sites = { konachan = [] }
+anilist = 82527
+
+[[character]]
+id = "jibril"
+native = ["ジブリール"]
+danbooru = "jibril_(no_game_no_life)"
+sites = { konachan = "jibril" }
+anilist = 87887
+
+[[character]]
+id = "hatsuse-izuna"
+native = ["初瀬いづな"]
+danbooru = "hatsuse_izuna"
+anilist = 88003
+
+[[character]]
+id = "teto"
+native = ["テト"]
+danbooru = "teto_(no_game_no_life)"
+sites = { konachan = "tet_(no_game_no_life)", yande = "tet_(no_game_no_life)", zerochan = "tet_(no_game_no_life)" }
+anilist = 88004

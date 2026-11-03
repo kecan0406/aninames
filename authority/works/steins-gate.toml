@@ -1,0 +1,26 @@
+name = "Steins;Gate"
+native = "シュタインズ・ゲート"
+danbooru = "steins;gate"
+lead = "steins-gate/makise-kurisu"
+
+[art]
+tmdb = "tv/42509"
+anilist = 9253
+
+[[character]]
+id = "makise-kurisu"
+native = ["牧瀬紅莉栖"]
+danbooru = "makise_kurisu"
+anilist = 34470
+
+[[character]]
+id = "shiina-mayuri"
+native = ["椎名まゆり"]
+danbooru = "shiina_mayuri"
+anilist = 35253
+
+[[character]]
+id = "amane-suzuha"
+native = ["阿万音鈴羽"]
+danbooru = "amane_suzuha"
+anilist = 35255

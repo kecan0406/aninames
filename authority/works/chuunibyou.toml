@@ -1,0 +1,42 @@
+name = "Chuunibyou"
+native = "中二病でも恋がしたい!"
+danbooru = "chuunibyou_demo_koi_ga_shitai!"
+lead = "chuunibyou/takanashi-rikka"
+
+[art]
+tmdb = "tv/45501"
+anilist = 14741
+
+[[character]]
+id = "takanashi-rikka"
+native = ["小鳥遊六花"]
+danbooru = "takanashi_rikka"
+anilist = 65865
+
+[[character]]
+id = "togashi-yuuta"
+native = ["富樫勇太"]
+danbooru = "togashi_yuuta"
+anilist = 65863
+person = "Yuta Togashi"
+
+[[character]]
+id = "nibutani-shinka"
+native = ["丹生谷森夏"]
+danbooru = "nibutani_shinka"
+anilist = 65871
+person = "Shinka Nibutani"
+
+[[character]]
+id = "dekomori-sanae"
+native = ["凸守早苗"]
+danbooru = "dekomori_sanae"
+anilist = 67215
+person = "Sanae Dekomori"
+
+[[character]]
+id = "tsuyuri-kumin"
+native = ["五月七日くみん"]
+danbooru = "tsuyuri_kumin"
+anilist = 67213
+person = "Kumin Tsuyuri"

@@ -1,0 +1,51 @@
+name = "Persona 5"
+native = "ペルソナ5"
+danbooru = "persona_5"
+lead = "persona-5/amamiya-ren"
+
+[art]
+tmdb = "tv/77701"
+anilist = 99693
+
+[[character]]
+id = "amamiya-ren"
+native = ["雨宮蓮", "来栖暁", "ジョーカー"]
+danbooru = "amamiya_ren"
+anilist = 121590
+
+[[character]]
+id = "sakamoto-ryuji"
+native = ["坂本竜司", "スカル"]
+danbooru = "sakamoto_ryuji"
+sites = { konachan = "sakamoto_ryuuji", yande = "sakamoto_ryuuji", zerochan = "sakamoto_ryuuji" }
+anilist = 122974
+
+[[character]]
+id = "takamaki-ann"
+native = ["高巻杏", "パンサー"]
+danbooru = "takamaki_ann"
+sites = { konachan = "takamaki_anne", yande = "takamaki_anne", zerochan = "takamaki_anne" }
+anilist = 120335
+
+[[character]]
+id = "kitagawa-yusuke"
+native = ["喜多川祐介", "フォックス"]
+danbooru = "kitagawa_yusuke"
+sites = { yande = "kitagawa_yuusuke", zerochan = "kitagawa_yuusuke" }
+anilist = 122975
+
+[[character]]
+id = "niijima-makoto"
+native = ["新島真", "クイーン"]
+danbooru = "niijima_makoto"
+anilist = 122977
+
+[[character]]
+id = "sakura-futaba"
+native = ["佐倉双葉", "ナビ"]
+danbooru = "sakura_futaba"
+anilist = 121635
+
+[[character]]
+id = "velvet"
+native = ["ベルベットルーム"]

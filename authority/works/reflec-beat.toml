@@ -1,0 +1,8 @@
+name = "REFLEC BEAT"
+danbooru = "reflec_beat"
+
+[[character]]
+id = "pastel-kun"
+native = ["パステルくん", "ぱすてるくん"]
+danbooru = "pastel-kun"
+sites = { konachan = [], yande = [], zerochan = [] }

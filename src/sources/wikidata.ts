@@ -226,6 +226,17 @@ function names(predicate: string): string {
   return `?item ${predicate} ?v BIND(LANG(?v) AS ?l) FILTER(${langs})`
 }
 
+const LINKS: { file: string; pattern: string; to: (value: string) => Ref | undefined }[] = [
+  { file: 'links-steam', pattern: '?item wdt:P1733 ?v', to: numeric('steam') },
+  { file: 'links-igdb', pattern: '?item wdt:P5794 ?v', to: igdb },
+  { file: 'links-tmdb-tv', pattern: '?item wdt:P4983 ?v ; wdt:P31/wdt:P279* wd:Q581714', to: numeric('tmdb', 'tv/') },
+  {
+    file: 'links-tmdb-movie',
+    pattern: '?item wdt:P4947 ?v ; wdt:P31/wdt:P279* wd:Q202866',
+    to: numeric('tmdb', 'movie/'),
+  },
+]
+
 const SITELINKS = '?item wikibase:sitelinks ?v'
 
 const ORIGIN = '?item wdt:P495/wdt:P297 ?v'
@@ -288,7 +299,7 @@ function sparql(query: Query, endpoint: Endpoint, linked: string[]): string {
   return `${PREFIXES}SELECT ${vars} WHERE { ${endpoint.hint} ${set} ${query.pattern} }`
 }
 
-interface Term {
+export interface Term {
   type: string
   value: string
   'xml:lang'?: string
@@ -333,6 +344,20 @@ async function ask(endpoint: Endpoint, query: string, again = true): Promise<{ t
     throw new Error('answered without results')
   }
   return { text, rows }
+}
+
+function linksQuery(pattern: string): string {
+  return `${PREFIXES}SELECT ?v ?label ?date WHERE { ${pattern} ; rdfs:label ?label . FILTER(LANG(?label) = 'en') OPTIONAL { ?item wdt:P577|wdt:P580 ?date } }`
+}
+
+async function fetchLinks(raw: string): Promise<void> {
+  const endpoint = ENDPOINTS.at(-1) as Endpoint
+  for (const { file, pattern } of LINKS) {
+    await save(raw, linksQuery(pattern), file, endpoint, new Date().toISOString()).catch((error: unknown) => {
+      const reason = error instanceof Error ? error.message : String(error)
+      console.log(`::warning::wikidata ${file} failed on ${endpoint.name} (${reason}); staging its last answer`)
+    })
+  }
 }
 
 function qid(term: Term | undefined): string | undefined {
@@ -426,6 +451,7 @@ async function fetchAll(raw: string): Promise<void> {
   } finally {
     await Bun.write(join(raw, 'meta.json'), `${JSON.stringify({ answers, misses, linked: linked?.length }, null, 2)}\n`)
   }
+  await fetchLinks(raw)
 }
 
 interface Item {
@@ -560,6 +586,33 @@ function entryOf(q: string, kind: Kind, item: Item): Entry {
   return entry
 }
 
+export function linkEntries(
+  rows: readonly Record<string, Term>[],
+  to: (value: string) => Ref | undefined,
+  held: ReadonlySet<Ref>,
+): Entry[] {
+  const found = new Map<Ref, { titles: Set<string>; year: number }>()
+  for (const row of rows) {
+    const id = row.v ? to(row.v.value) : undefined
+    const title = row.label?.value.normalize('NFC').trim()
+    const year = Number(row.date?.value.match(/^(\d{4})-/)?.[1])
+    if (!id || !title || !year || held.has(id)) continue
+    const known = found.get(id)
+    if (known) {
+      known.titles.add(title)
+      known.year = Math.min(known.year, year)
+    } else found.set(id, { titles: new Set([title]), year })
+  }
+  return [...found].map(([id, { titles, year }]) => ({
+    id,
+    kind: 'work',
+    attach: true,
+    link: [...titles],
+    year,
+    names: [],
+  }))
+}
+
 async function* stage(raw: string): AsyncIterable<Entry> {
   const items: Record<Kind, Map<string, Item>> = { work: new Map(), character: new Map() }
   for (const query of QUERIES) {
@@ -572,6 +625,11 @@ async function* stage(raw: string): AsyncIterable<Entry> {
     if (!items.character.has(q)) {
       yield entryOf(q, 'work', item)
     }
+  }
+  const held = new Set([...items.work.values()].flatMap((item) => item.refs))
+  for (const { file, to } of LINKS) {
+    if (!(await Bun.file(join(raw, `${file}.json`)).exists())) continue
+    yield* linkEntries(await rowsOf(raw, file), to, held)
   }
   const types = new Map<string, string[]>()
   for (const row of await rowsOf(raw, NATURES_FILE)) {

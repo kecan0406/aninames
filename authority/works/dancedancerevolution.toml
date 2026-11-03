@@ -1,0 +1,20 @@
+name = "DanceDanceRevolution"
+danbooru = "dance_dance_revolution"
+
+[[character]]
+id = "alice-ip"
+native = ["アリス・イップ", "アリス"]
+danbooru = "alice_ip"
+sites = { konachan = [], yande = [] }
+
+[[character]]
+id = "toshiba-emi"
+native = ["東芝恵美", "エミ", "恵美"]
+danbooru = "toshiba_emi"
+sites = { konachan = [], yande = [] }
+
+[[character]]
+id = "yuni"
+native = ["ユニ・バース", "ユニ"]
+danbooru = "yuni_(dance_dance_revolution)"
+sites = { konachan = [], yande = [], zerochan = [] }

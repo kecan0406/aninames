@@ -1,0 +1,36 @@
+name = "Higurashi"
+native = "ひぐらしのなく頃に"
+danbooru = "higurashi_no_naku_koro_ni"
+lead = "higurashi/hinamizawa"
+
+[art]
+tmdb = "tv/25760"
+anilist = 934
+
+[[character]]
+id = "ryuuguu-rena"
+native = ["竜宮レナ"]
+danbooru = "ryuuguu_rena"
+anilist = 1427
+
+[[character]]
+id = "sonozaki-mion"
+native = ["園崎魅音"]
+danbooru = "sonozaki_mion"
+anilist = 1611
+
+[[character]]
+id = "furude-rika"
+native = ["古手梨花"]
+danbooru = "furude_rika"
+anilist = 1534
+
+[[character]]
+id = "houjou-satoko"
+native = ["北条沙都子"]
+danbooru = "houjou_satoko"
+anilist = 1612
+
+[[character]]
+id = "hinamizawa"
+native = ["雛見沢"]

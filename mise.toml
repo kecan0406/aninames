@@ -24,6 +24,10 @@ run = "bun src/cli.ts pack"
 description = "cut the built layers' search keys into the static site in dist/site: mise run chunk [bytes per file]"
 run = "bun src/cli.ts chunk"
 
+[tasks.authority]
+description = "check authority/works/ and write it as one JSON file"
+run = "bun src/cli.ts authority"
+
 [tasks.audit]
 description = "check the built files before they are published: mise run audit [previous stats.json] [published client dir…]"
 run = "bun src/cli.ts audit"
@@ -38,7 +42,7 @@ run = "bun src/cli.ts compare"
 
 [tasks.lib]
 description = "compile the client library into lib/ for the npm package"
-run = "rm -rf lib && tsc -p tsconfig.lib.json"
+run = ["rm -rf lib", "tsc -p tsconfig.lib.json", "bun src/cli.ts authority lib/authority.json"]
 
 [tasks.search]
 description = "search the built layers: mise run search <query>"

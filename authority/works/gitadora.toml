@@ -1,0 +1,20 @@
+name = "GITADORA"
+danbooru = "gitadora"
+
+[[character]]
+id = "gen"
+native = ["弦", "ゲン"]
+danbooru = "gen_(gitadora)"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "kyouka"
+native = ["響香", "キョウカ"]
+danbooru = "kyouka_(gitadora)"
+sites = { konachan = [], yande = [], zerochan = [] }
+
+[[character]]
+id = "rio"
+native = ["璃音", "リオ"]
+danbooru = "rio_(gitadora)"
+sites = { konachan = [], yande = [], zerochan = [] }
