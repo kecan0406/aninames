@@ -10,11 +10,16 @@ interface Row {
   anilist_id?: number
   mal_id?: number
   anidb_id?: number
-  themoviedb_id?: { tv?: number; movie?: number }
+  themoviedb_id?: { tv?: number | string; movie?: number | string }
+}
+
+function firstOf(id: number | string | undefined): string | undefined {
+  return String(id ?? '').match(/^\d+/)?.[0]
 }
 
 function tmdbOf(row: Row): Ref | undefined {
-  const { tv, movie } = row.themoviedb_id ?? {}
+  const tv = firstOf(row.themoviedb_id?.tv)
+  const movie = firstOf(row.themoviedb_id?.movie)
   return tv ? ref('tmdb', `tv/${tv}`) : movie ? ref('tmdb', `movie/${movie}`) : undefined
 }
 

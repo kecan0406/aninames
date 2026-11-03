@@ -103,6 +103,7 @@ test('the id map gives a work its TMDB number through the numbers it shares', ()
     names: [],
   })
   expect(entryOf({ anidb_id: 7, themoviedb_id: { movie: 9 } })?.id).toBe('tmdb:movie/9')
+  expect(entryOf({ anidb_id: 7, themoviedb_id: { movie: '9,11' } })?.id).toBe('tmdb:movie/9')
   expect(entryOf({ anilist_id: 7 })).toBeUndefined()
   expect(entryOf({ themoviedb_id: { tv: 9 } })).toBeUndefined()
 })
