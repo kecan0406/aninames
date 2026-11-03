@@ -1,6 +1,10 @@
 name = "SOUND VOLTEX"
 danbooru = "sound_voltex"
 
+[art]
+igdb = "sound-voltex-booth"
+bangumi = 227366
+
 [[character]]
 id = "grace"
 native = ["グレイス"]

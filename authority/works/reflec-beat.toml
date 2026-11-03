@@ -1,6 +1,9 @@
 name = "REFLEC BEAT"
 danbooru = "reflec_beat"
 
+[art]
+igdb = "reflec-beat"
+
 [[character]]
 id = "pastel-kun"
 native = ["パステルくん", "ぱすてるくん"]

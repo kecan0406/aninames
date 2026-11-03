@@ -51,7 +51,7 @@ jobs:
       - name: Audit before anything is published
         env:
           GH_TOKEN: ${{ github.token }}
-          CONSUMER_CLIENT: '0.7'
+          CONSUMER_CLIENT: '0.8'
         run: |
           bun src/cli.ts eval
           assets="$(gh release view --json assets --jq '.assets[].name')"

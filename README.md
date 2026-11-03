@@ -78,6 +78,19 @@ const works = await names.lookup(first?.works ?? [])
 
 `layers` picks the optional layers (`core`, `kowiki`); `unlicensed`, which holds the Bangumi spine, is always read. `search` returns `Found` cards (`id`, `kind`, `label`, the preferred name in Japanese, else English, romaji or Korean, `names` with their `lang` and `kind`, one per language marked `preferred`, `danbooru` tags, those naming the work itself first, then most posts first, `works`, `refs`, `home`, the copyright tag a character comes from, `copyrights`, the wider copyright tags nearly all its posts carry, `origin`, the countries a work comes from, `year`, `medium` and `genres`, `nature`, `family`, `score`, `match`, how the query met the name: `name` for a whole name, `part` for one word of it, `prefix`, `sound`, `typo` or `family`, and `adult`); `search(query, { kind, limit, adult: false })` narrows it, `lookup(ids)` returns the cards of given ids in one round, and `tagged(tag, { kind, adult })` the cards of the entities that carry a Danbooru tag or that `family`, a family's head first, then most posts, whatever its case, punctuation or qualifier (`soul-eater`, `soul_eater` and `soul_eater_(series)` find the same works); `prefix: true` also finds the tags that start with it. `cast(tag, { adult, prefix, limit })` returns the characters whose home or `copyrights` hold that tag as `Member` cards, a `Found` with its `role` there (`lead`, `support` or `minor`, minor when none of its works reach the tag): its leads, then its supporting cast, then the rest, each most posts first. `cachedSource` keeps the files it fetched forever (their names are hashes of their contents), revalidates the manifest with its ETag or Last-Modified once a day (`maxAge`), answers from the cache when offline, refetches the manifest when the site has moved on to a new build, and deletes files a new manifest no longer names. `fileSource(dir)` reads a local `dist/site`.
 
+## Pictures
+
+`@kecan0406/aninames/pictures` turns a work's ids into its key art and a character's into a picture when you ask, with your own keys. The index holds ids and never a picture's address, since AniList's and TMDB's terms forbid storing their data, so a picture always comes from its source's servers.
+
+```ts
+import { keyArtOf, picksOf } from '@kecan0406/aninames/pictures'
+
+const works = await names.tagged('lumen_song', { kind: 'work' })
+const art = await keyArtOf([picksOf(works)], { tmdb: TMDB_TOKEN }, { tries: 1, timeout: 3000 })
+```
+
+It tries TMDB, an AniList banner, Steam and IGDB, then a Bangumi cover, marked `cover`. A source with no key is skipped.
+
 ## Development
 
 ```sh

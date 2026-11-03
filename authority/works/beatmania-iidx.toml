@@ -1,6 +1,10 @@
 name = "beatmania IIDX"
 danbooru = "beatmania_iidx"
 
+[art]
+igdb = "beatmania-iidx"
+bangumi = 163913
+
 [[character]]
 id = "hinazuki-ririna"
 native = ["雛月理々奈", "リリス", "理々奈"]

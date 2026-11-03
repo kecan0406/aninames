@@ -1,6 +1,9 @@
 name = "DanceDanceRevolution"
 danbooru = "dance_dance_revolution"
 
+[art]
+igdb = "dance-dance-revolution"
+
 [[character]]
 id = "alice-ip"
 native = ["アリス・イップ", "アリス"]

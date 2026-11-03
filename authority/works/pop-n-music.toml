@@ -1,6 +1,9 @@
 name = "pop'n music"
 danbooru = "pop'n_music"
 
+[art]
+igdb = "popn-music--1"
+
 [[character]]
 id = "milk"
 native = ["ミルク"]
